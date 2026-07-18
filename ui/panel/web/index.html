@@ -7,16 +7,16 @@
 <style>
   :root{
     --accent:#0e7c86; --accent-fg:#fff; --accent-weak:#0e7c8618;
-    --bg:#f4f6f8; --panel:#ffffff; --panel-2:#f8fafc; --text:#12181d; --muted:#5b6b78;
+    --bg:#f4f6f8; --panel:#ffffff; --panel-2:#f8fafc; --text:#263038; --muted:#728492;
     --border:#e2e8ee; --shadow:0 1px 2px #0f172a12,0 8px 24px #0f172a0d;
     --ok:#1a9c53; --warn:#c47d00; --bad:#c23a3a; --radius:12px;
   }
   @media (prefers-color-scheme: dark){
-    :root{ --bg:#0e1216; --panel:#161c22; --panel-2:#1b232b; --text:#e7edf2; --muted:#94a6b4;
+    :root{ --bg:#0e1216; --panel:#161c22; --panel-2:#1b232b; --text:#dce4eb; --muted:#90a2b0;
       --border:#26313b; --shadow:0 1px 2px #0000004d,0 10px 30px #00000040; --accent-weak:#0e7c8630; }
   }
-  :root[data-theme="light"]{ --bg:#f4f6f8; --panel:#fff; --panel-2:#f8fafc; --text:#12181d; --muted:#5b6b78; --border:#e2e8ee; --shadow:0 1px 2px #0f172a12,0 8px 24px #0f172a0d; --accent-weak:#0e7c8618; }
-  :root[data-theme="dark"]{ --bg:#0e1216; --panel:#161c22; --panel-2:#1b232b; --text:#e7edf2; --muted:#94a6b4; --border:#26313b; --shadow:0 1px 2px #0000004d,0 10px 30px #00000040; --accent-weak:#0e7c8630; }
+  :root[data-theme="light"]{ --bg:#f4f6f8; --panel:#fff; --panel-2:#f8fafc; --text:#263038; --muted:#728492; --border:#e2e8ee; --shadow:0 1px 2px #0f172a12,0 8px 24px #0f172a0d; --accent-weak:#0e7c8618; }
+  :root[data-theme="dark"]{ --bg:#0e1216; --panel:#161c22; --panel-2:#1b232b; --text:#dce4eb; --muted:#90a2b0; --border:#26313b; --shadow:0 1px 2px #0000004d,0 10px 30px #00000040; --accent-weak:#0e7c8630; }
 
   /* Overlay-style scrollbars: transparent track, thin translucent thumb (no light background) */
   :root{ --thumb:#5b6b7855; --thumb-h:#5b6b7899; }
@@ -32,7 +32,7 @@
 
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{margin:0;font:14px/1.5 system-ui,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);
+  body{margin:0;font:14px/1.42 system-ui,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);
     -webkit-user-select:none;user-select:none;overflow:hidden}
   .app{display:flex;height:100vh}
 
@@ -44,7 +44,7 @@
   .brand .logo::after{content:"";position:absolute;inset:0;background:
     linear-gradient(45deg,transparent 46%,#fff 46% 54%,transparent 54%) no-repeat;
     -webkit-mask:radial-gradient(#000,#000);opacity:.9}
-  .brand b{font-size:16px;letter-spacing:.2px}
+  .brand b{font-size:16px;letter-spacing:.2px;font-weight:600}
   .nav{display:flex;flex-direction:column;gap:2px;margin-top:6px}
   .nav a{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;color:var(--muted);
     text-decoration:none;cursor:pointer;font-weight:500}
@@ -65,30 +65,30 @@
   .themebtn:hover,.langsel:hover{color:var(--text)}
 
   /* main */
-  .main{flex:1;overflow:auto;padding:26px 30px}
-  .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
-  .head h1{font-size:20px;margin:0;font-weight:650}
-  .pill{font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:var(--panel);border:1px solid var(--border);color:var(--muted);display:inline-flex;gap:7px;align-items:center}
+  .main{flex:1;overflow:auto;padding:20px 24px}
+  .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .head h1{font-size:20px;margin:0;font-weight:500;letter-spacing:.1px}
+  .pill{font-size:12px;font-weight:500;padding:5px 11px;border-radius:999px;background:var(--panel);border:1px solid var(--border);color:var(--muted);display:inline-flex;gap:7px;align-items:center}
   .section{display:none} .section.active{display:block}
 
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow)}
-  .card h3{margin:0 0 3px;font-size:13px;color:var(--muted);font-weight:600}
-  .card .big{font-size:22px;font-weight:700;letter-spacing:.2px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;box-shadow:var(--shadow)}
+  .card h3{margin:0 0 5px;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.07em}
+  .card .big{font-size:22px;font-weight:600;letter-spacing:.2px}
   .card .sub{color:var(--muted);font-size:12.5px;margin-top:2px}
 
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .spacer{flex:1}
-  label.fld{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--muted);font-weight:600}
+  label.fld{display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.06em}
   input[type=text],input[type=number],input[type=password],select,textarea{
     background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:9px;
     padding:9px 11px;font:inherit;outline:none;-webkit-user-select:text;user-select:text}
   input:focus,select:focus,textarea:focus{border-color:var(--accent)}
   textarea{resize:vertical;min-height:64px}
-  .form{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .form{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .form .wide{grid-column:1 / -1}
 
-  button{font:inherit;font-weight:600;border-radius:9px;padding:9px 15px;border:1px solid var(--border);
+  button{font:inherit;font-weight:500;border-radius:9px;padding:9px 15px;border:1px solid var(--border);
     background:var(--panel-2);color:var(--text);cursor:pointer}
   button:hover{border-color:var(--accent)}
   button:disabled{opacity:.45;cursor:not-allowed}
@@ -98,7 +98,7 @@
   button.danger:hover{border-color:var(--bad)}
 
   /* switch */
-  .switch{position:relative;display:inline-flex;align-items:center;gap:10px;cursor:pointer;font-weight:600}
+  .switch{position:relative;display:inline-flex;align-items:center;gap:10px;cursor:pointer;font-weight:500}
   .switch input{display:none}
   .track{width:44px;height:25px;border-radius:999px;background:var(--border);position:relative;transition:.15s;flex:0 0 auto}
   .track::after{content:"";position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;transition:.15s;box-shadow:0 1px 2px #0006}
@@ -206,7 +206,7 @@
         </div>
       </div>
 
-      <div class="card" style="margin-top:14px">
+      <div class="card" style="margin-top:10px">
         <h3 data-i18n="h.proxiedApps">Proxied applications</h3>
         <div class="row" style="margin-top:8px">
           <input type="text" id="fApp" list="procList" data-i18n-ph="ph.app" style="flex:1;min-width:200px">
@@ -220,7 +220,7 @@
         <div class="sub muted" id="managedAppsBox" style="margin-top:8px;display:none"><span data-i18n="cfg.managedApps">Also proxied, from the managed config:</span> <span id="managedAppsList" class="mono"></span></div>
       </div>
 
-      <div class="card" style="margin-top:14px">
+      <div class="card" style="margin-top:10px">
         <h3 data-i18n="cfg.title">Config source (optional)</h3>
         <div class="form" style="margin-top:8px">
           <label class="fld wide"><span data-i18n="cfg.url">Config URL</span><input type="text" id="cfgUrl" data-i18n-ph="cfg.urlPh"></label>
@@ -237,7 +237,7 @@
         <div class="sub muted" style="margin-top:8px" data-i18n="cfg.hint">When set, the config is pulled from this URL and applied automatically.</div>
       </div>
 
-      <div class="row" style="margin-top:14px">
+      <div class="row" style="margin-top:10px">
         <button class="primary" id="btnSave" data-i18n="btn.save">Save &amp; apply</button>
         <button id="btnTest2" data-i18n="btn.test">Test proxy</button>
       </div>
@@ -295,7 +295,7 @@
         <p class="muted" style="margin:14px 0 0" data-i18n="about.desc">Per-application SOCKS5 proxifier for Windows. Routes selected apps through a SOCKS5 proxy via a TUN adapter, automatically — no per-app launching.</p>
       </div>
 
-      <div class="card" style="max-width:560px;margin-top:14px">
+      <div class="card" style="max-width:560px;margin-top:10px">
         <h3 data-i18n="upd.title">Updates</h3>
         <div class="form" style="margin-top:8px">
           <label class="fld wide"><span data-i18n="upd.endpoint">Update source (URL)</span><input type="text" id="uEndpoint" data-i18n-ph="upd.endpointPh"></label>
