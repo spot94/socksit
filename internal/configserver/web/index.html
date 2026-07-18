@@ -35,6 +35,8 @@
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .grid .wide{grid-column:1 / -1}
+  .msub{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin:14px 0 6px}
+  .mgroup{border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-top:8px}
   label.fld{display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.06em}
   input,select,textarea{background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:9px 11px;font:inherit;outline:none}
   input:focus,select:focus,textarea:focus{border-color:var(--accent)}
@@ -103,14 +105,26 @@
           <div class="banner" id="editBanner"></div>
           <div class="row" style="margin-top:12px"><button class="primary" id="btnSaveProfile">Save &amp; sign</button><button class="danger" id="btnDeleteProfile">Delete</button></div>
           <h3 style="margin-top:16px">Migration (optional) — pushed to clients</h3>
-          <div class="grid">
-            <label class="fld wide">New config URL<input type="text" id="mConfigUrl" placeholder="https://new-host/configs/team-a/socksit.yaml"></label>
-            <label class="fld">Update endpoint<input type="text" id="mUpdEndpoint" placeholder="https://…/releases/latest/download"></label>
-            <label class="fld">Update channel<input type="text" id="mUpdChannel" placeholder="stable"></label>
-            <label class="fld">Update mode<select id="mUpdMode"><option value="">(unchanged)</option><option value="off">off</option><option value="notify">notify</option><option value="auto">auto</option></select></label>
-            <label class="fld wide">Rotate trusted key (new pubkey)<input type="text" id="mPubKey" class="mono" placeholder="new base64 Ed25519 public key — clients must approve"></label>
+          <div class="sub muted">Leave a field empty to keep it unchanged; clear everything to remove the migration.</div>
+
+          <div class="mgroup">
+            <div class="msub">Config channel</div>
+            <div class="grid">
+              <label class="fld wide">New config URL<input type="text" id="mConfigUrl" placeholder="https://new-host/configs/team-a/socksit.yaml"></label>
+              <label class="fld wide">Rotate trusted key (new pubkey)<input type="text" id="mPubKey" class="mono" placeholder="new base64 Ed25519 public key"></label>
+            </div>
+            <div class="sub muted" style="margin-top:6px">URL applies automatically (still guarded by the pinned key). A new trusted key moves the root of trust, so each client's admin must approve it.</div>
           </div>
-          <div class="sub muted" style="margin-top:6px">Config URL and update.* apply automatically on clients (still guarded by the pinned key / the app's built-in update key). A new trusted key requires each client's admin to approve. Clear all fields to remove the migration.</div>
+
+          <div class="mgroup">
+            <div class="msub">Update channel</div>
+            <div class="grid">
+              <label class="fld wide">Update endpoint<input type="text" id="mUpdEndpoint" placeholder="https://…/releases/latest/download"></label>
+              <label class="fld">Update channel<input type="text" id="mUpdChannel" placeholder="stable"></label>
+              <label class="fld">Update mode<select id="mUpdMode"><option value="">(unchanged)</option><option value="off">off</option><option value="notify">notify</option><option value="auto">auto</option></select></label>
+            </div>
+            <div class="sub muted" style="margin-top:6px">Applied automatically; app binaries are still verified against the built-in update key.</div>
+          </div>
           <h3 style="margin-top:16px">Client snippet (config_source)</h3>
           <div class="snippet" id="snippet">—</div>
           <div class="row" style="margin-top:8px"><button id="btnCopySnippet">Copy</button></div>
