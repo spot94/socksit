@@ -287,6 +287,7 @@
         <div class="row" style="margin-top:12px">
           <button class="primary" id="btnUpdSave" data-i18n="upd.save">Save</button>
           <button id="btnUpdCheck" data-i18n="upd.check">Check now</button>
+          <button class="primary" id="btnUpdApply" style="display:none" data-i18n="upd.apply">Apply update</button>
           <span class="muted" id="updStatus"></span>
         </div>
         <div class="sub muted" style="margin-top:8px" data-i18n="upd.hint">Trust is verified by signature — the source/CDN is untrusted.</div>
@@ -329,7 +330,7 @@ const I18N = {
     'upd.title':'Updates','upd.endpoint':'Update source (URL)','upd.endpointPh':'https://github.com/<owner>/<repo>/releases/latest/download',
     'upd.channel':'Channel','upd.mode':'Mode','upd.mode.off':'Off','upd.mode.notify':'Notify','upd.mode.auto':'Auto',
     'upd.interval':'Check interval','upd.proxy':'Proxy for checks','upd.proxyPh':'empty=direct · system · use-socks · socks5://host:port',
-    'upd.save':'Save','upd.check':'Check now','upd.upToDate':'Up to date (v{v})','upd.available':'Update available: v{v}','upd.checking':'Checking…','upd.hint':'Trust is verified by signature — the source/CDN is untrusted.'
+    'upd.save':'Save','upd.check':'Check now','upd.apply':'Apply update','upd.applying':'Downloading and applying…','upd.upToDate':'Up to date (v{v})','upd.available':'Update available: v{v}','upd.checking':'Checking…','upd.hint':'Trust is verified by signature — the source/CDN is untrusted.'
   },
   ru: {
     'nav.dashboard':'Обзор','nav.settings':'Настройки','nav.statistics':'Статистика','nav.logs':'Логи','nav.diagnostics':'Диагностика','nav.about':'О программе',
@@ -361,7 +362,7 @@ const I18N = {
     'upd.title':'Обновления','upd.endpoint':'Источник обновлений (URL)','upd.endpointPh':'https://github.com/<owner>/<repo>/releases/latest/download',
     'upd.channel':'Канал','upd.mode':'Режим','upd.mode.off':'Выкл','upd.mode.notify':'Уведомлять','upd.mode.auto':'Авто',
     'upd.interval':'Интервал проверки','upd.proxy':'Прокси для проверок','upd.proxyPh':'пусто=напрямую · system · use-socks · socks5://host:port',
-    'upd.save':'Сохранить','upd.check':'Проверить сейчас','upd.upToDate':'Актуальная версия (v{v})','upd.available':'Доступно обновление: v{v}','upd.checking':'Проверка…','upd.hint':'Подлинность проверяется подписью — источник/CDN недоверенный.'
+    'upd.save':'Сохранить','upd.check':'Проверить сейчас','upd.apply':'Установить обновление','upd.applying':'Скачивание и установка…','upd.upToDate':'Актуальная версия (v{v})','upd.available':'Доступно обновление: v{v}','upd.checking':'Проверка…','upd.hint':'Подлинность проверяется подписью — источник/CDN недоверенный.'
   }
 };
 let lang = 'en';
@@ -605,6 +606,8 @@ async function loadUpdate(){
 function pickNotes(r){ return lang==='ru' ? (r.notesRu||r.notesEn||'') : (r.notesEn||r.notesRu||''); }
 function renderUpdateStatus(){
   const el = g('updStatus'); const r = lastUpd; if(!el) return;
+  const applyBtn = g('btnUpdApply');
+  if(applyBtn) applyBtn.style.display = (r && r.hasUpdate) ? '' : 'none';
   if(!r){ el.textContent=''; return; }
   if(r.error){ el.textContent = r.error; return; }
   if(r.hasUpdate){ const n=pickNotes(r); el.textContent = t('upd.available',{v:r.available}) + (n?' — '+n:''); }
@@ -616,6 +619,13 @@ g('btnUpdSave').onclick = async ()=>{ const b=g('updBanner'); banner(b,'info',t(
     mode:g('uMode').value, checkInterval:g('uInterval').value.trim()||'24h', proxy:g('uProxy').value.trim() });
   banner(b, r.ok?'ok':'err', r.message); };
 g('btnUpdCheck').onclick = async ()=>{ g('updStatus').textContent=t('upd.checking'); lastUpd = await job('startUpdateCheck'); renderUpdateStatus(); };
+g('btnUpdApply').onclick = async ()=>{
+  g('updStatus').textContent = t('upd.applying'); g('btnUpdApply').disabled = true;
+  const r = await job('startUpdateApply');
+  if(r && r.message) g('updStatus').textContent = r.message;
+  // The service restarts to finish — re-poll status shortly.
+  setTimeout(()=>{ g('btnUpdApply').disabled = false; loadUpdate(); refreshState(); }, 6000);
+};
 
 /* ---------- utils + boot ---------- */
 function escapeHtml(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }

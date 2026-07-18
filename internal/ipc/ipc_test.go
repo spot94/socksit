@@ -34,6 +34,7 @@ func (h *fakeHandler) Reload() error              { h.reloaded = true; return ni
 func (h *fakeHandler) Stats() (any, error)        { return []string{}, nil }
 func (h *fakeHandler) UpdateStatus() (any, error) { return map[string]string{}, nil }
 func (h *fakeHandler) UpdateCheck() (any, error)  { return map[string]string{}, nil }
+func (h *fakeHandler) UpdateApply() (any, error)  { return map[string]string{}, nil }
 
 type syncBuf struct {
 	mu sync.Mutex

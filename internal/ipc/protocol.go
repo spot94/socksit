@@ -19,6 +19,7 @@ const (
 	OpStats        = "stats"
 	OpUpdateStatus = "update_status"
 	OpUpdateCheck  = "update_check"
+	OpUpdateApply  = "update_apply"
 )
 
 // Request is a single control call. Args carries operation parameters; it is
@@ -47,4 +48,5 @@ type Handler interface {
 	Stats() (any, error)
 	UpdateStatus() (any, error)
 	UpdateCheck() (any, error)
+	UpdateApply() (any, error)
 }

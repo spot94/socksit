@@ -95,6 +95,10 @@ func (s *Server) dispatch(req Request) Response {
 		return dataResp(s.h.UpdateStatus())
 	case OpUpdateCheck:
 		return dataResp(s.h.UpdateCheck())
+	case OpUpdateApply:
+		resp := dataResp(s.h.UpdateApply())
+		s.audit("applied an update", "socksit.exe")
+		return resp
 
 	case OpSetConfig:
 		if err := s.h.SetConfig(req.Args["yaml"]); err != nil {

@@ -9,7 +9,9 @@ package updates
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -66,48 +68,87 @@ type Result struct {
 	Error     string `json:"error"`
 }
 
-// Check fetches and verifies the manifest, then compares versions. client is
-// prepared by the caller (proxy/transport); endpoint is the release base URL.
-func Check(ctx context.Context, client *http.Client, endpoint, channel, current string) (Result, error) {
-	res := Result{Current: current}
+// Fetch downloads and verifies the manifest (Ed25519 signature + schema/product),
+// returning it. client is prepared by the caller (proxy/transport); endpoint is
+// the release base URL.
+func Fetch(ctx context.Context, client *http.Client, endpoint, channel string) (Manifest, error) {
+	var m Manifest
 	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
 	if endpoint == "" {
-		return res, errors.New("update endpoint not configured")
+		return m, errors.New("update endpoint not configured")
 	}
 	keys := trustedKeys()
 	if len(keys) == 0 {
-		return res, errors.New("no trusted update key is compiled into this build")
+		return m, errors.New("no trusted update key is compiled into this build")
 	}
 	base := endpoint + "/" + manifestName(channel)
 	body, err := get(ctx, client, base)
 	if err != nil {
-		return res, err
+		return m, err
 	}
 	sigRaw, err := get(ctx, client, base+".sig")
 	if err != nil {
-		return res, err
+		return m, err
 	}
 	sig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(sigRaw)))
 	if err != nil {
-		return res, fmt.Errorf("bad signature encoding: %w", err)
+		return m, fmt.Errorf("bad signature encoding: %w", err)
 	}
 	if !verify(keys, body, sig) {
-		return res, errors.New("manifest signature is not valid")
+		return m, errors.New("manifest signature is not valid")
 	}
-	var m Manifest
 	if err := json.Unmarshal(body, &m); err != nil {
-		return res, fmt.Errorf("bad manifest: %w", err)
+		return m, fmt.Errorf("bad manifest: %w", err)
 	}
 	if m.Schema != schemaVersion {
-		return res, fmt.Errorf("unsupported manifest schema %d", m.Schema)
+		return m, fmt.Errorf("unsupported manifest schema %d", m.Schema)
 	}
 	if m.Product != "socksit" {
-		return res, fmt.Errorf("manifest is for %q, not socksit", m.Product)
+		return m, fmt.Errorf("manifest is for %q, not socksit", m.Product)
+	}
+	return m, nil
+}
+
+// Check fetches+verifies the manifest and compares versions.
+func Check(ctx context.Context, client *http.Client, endpoint, channel, current string) (Result, error) {
+	res := Result{Current: current}
+	m, err := Fetch(ctx, client, endpoint, channel)
+	if err != nil {
+		return res, err
 	}
 	res.Available = m.Version
 	res.NotesEN, res.NotesRU = m.NotesEN, m.NotesRU
 	res.HasUpdate = compareVersions(m.Version, current) > 0
 	return res, nil
+}
+
+// Newer reports whether version a is strictly newer than b.
+func Newer(a, b string) bool { return compareVersions(a, b) > 0 }
+
+// DownloadVerified downloads url and checks its SHA-256 against the (signed-
+// manifest) expected hex digest. The bytes are safe to execute only if err is nil.
+func DownloadVerified(ctx context.Context, client *http.Client, url, sha256hex string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GET %s: HTTP %d", url, resp.StatusCode)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 256<<20)) // 256 MiB cap
+	if err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(b)
+	if !strings.EqualFold(hex.EncodeToString(sum[:]), strings.TrimSpace(sha256hex)) {
+		return nil, errors.New("downloaded file does not match the signed checksum")
+	}
+	return b, nil
 }
 
 func trustedKeys() []ed25519.PublicKey {

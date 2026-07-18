@@ -70,6 +70,15 @@ func main() {
 		summary, err := service.Setup(exe)
 		mustRun(err)
 		fmt.Println("setup complete:", summary)
+	case "update-restart":
+		// Detached helper spawned by the service to apply an update (stop → start
+		// the new version, roll back on failure). Runs as SYSTEM.
+		fs := flag.NewFlagSet("update-restart", flag.ExitOnError)
+		name := fs.String("service", service.ServiceName, "service name")
+		target := fs.String("target", "", "installed socksit.exe path")
+		old := fs.String("old", "", "backup (.old) path to roll back from")
+		mustRun(fs.Parse(os.Args[2:]))
+		mustRun(service.RunUpdateRestart(*name, *target, *old))
 	case "tray":
 		tray.Run(ipc.DefaultPipeName, Version)
 	case "gui":

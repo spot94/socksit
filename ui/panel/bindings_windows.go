@@ -137,6 +137,7 @@ func (a *app) bind() {
 	_ = a.w.Bind("startDiagnostics", a.startDiagnostics)
 	_ = a.w.Bind("startStats", a.startStats)
 	_ = a.w.Bind("startUpdateCheck", a.startUpdateCheck)
+	_ = a.w.Bind("startUpdateApply", a.startUpdateApply)
 }
 
 type updateView struct {
@@ -213,6 +214,19 @@ func (a *app) startUpdateCheck(id string) {
 		resp, err := ipc.Call(a.pipe, ipc.Request{Op: ipc.OpUpdateCheck}, 30*time.Second)
 		if err != nil || !resp.OK {
 			a.resolve(id, map[string]any{"error": a.tr("the service is not reachable", "служба недоступна")})
+			return
+		}
+		a.resolve(id, json.RawMessage(resp.Data))
+	}()
+}
+
+// startUpdateApply asks the service to download and apply the update. The service
+// restarts to finish, so the pipe may drop right after — the UI re-polls status.
+func (a *app) startUpdateApply(id string) {
+	go func() {
+		resp, err := ipc.Call(a.pipe, ipc.Request{Op: ipc.OpUpdateApply}, 6*time.Minute)
+		if err != nil || !resp.OK {
+			a.resolve(id, map[string]any{"ok": false, "message": a.tr("the service is not reachable (it may be restarting to apply the update)", "служба недоступна (возможно, перезапускается для установки обновления)")})
 			return
 		}
 		a.resolve(id, json.RawMessage(resp.Data))
