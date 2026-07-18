@@ -25,8 +25,9 @@ import (
 
 // Version is the SocksIt build version, overridden at release time via
 // -ldflags "-X main.Version=X.Y.Z". It MUST be a var (not const) — the linker's
-// -X flag cannot patch a constant.
-var Version = "0.1.0-dev"
+// -X flag cannot patch a constant. Keep this "<next release>-dev" so an untagged
+// local build reads as newer than the last release, not as an old version.
+var Version = "0.1.4-dev"
 
 func main() {
 	if len(os.Args) < 2 {

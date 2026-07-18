@@ -121,6 +121,7 @@ type ipcStatus struct {
 	Enabled bool   `json:"enabled"`
 	State   string `json:"state"`
 	PID     int    `json:"pid"`
+	Version string `json:"version"` // the running service's build version
 }
 
 func (a *app) bind() {
@@ -295,6 +296,12 @@ func (a *app) state() stateView {
 		if json.Unmarshal(resp.Data, &st) == nil {
 			s.Enabled = st.Enabled
 			s.PID = st.PID
+			// Show the RUNNING service's version — that's what updates compare and
+			// replace. It can differ from this panel binary's version (e.g. a dev
+			// panel run against an installed service); the panel value is the fallback.
+			if st.Version != "" {
+				s.Version = st.Version
+			}
 			switch {
 			case !st.Enabled:
 				s.Engine = "paused"
