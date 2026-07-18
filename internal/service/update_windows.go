@@ -4,11 +4,13 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -88,8 +90,20 @@ func (r *Runtime) lenientConfig() *config.Config {
 	return config.Default()
 }
 
-// buildUpdateClient constructs an HTTP client honoring update.proxy.
+// buildUpdateClient constructs an HTTP client honoring update.proxy, injecting
+// the stored SOCKS5 credentials for use-socks.
 func (r *Runtime) buildUpdateClient(cfg *config.Config) (*http.Client, error) {
+	var auth *proxy.Auth
+	if u, pass, ok := r.loadCreds(); ok && u != "" {
+		auth = &proxy.Auth{User: u, Password: pass}
+	}
+	return updateHTTPClient(cfg, auth)
+}
+
+// updateHTTPClient builds the client for update/engine fetches per cfg.Update.Proxy.
+// For use-socks with no proxy configured yet it connects directly, so a first-run
+// engine download still works before the proxy is set up.
+func updateHTTPClient(cfg *config.Config, auth *proxy.Auth) (*http.Client, error) {
 	tr := &http.Transport{}
 	switch p := strings.TrimSpace(cfg.Update.Proxy); {
 	case p == "":
@@ -97,13 +111,10 @@ func (r *Runtime) buildUpdateClient(cfg *config.Config) (*http.Client, error) {
 	case p == "system":
 		tr.Proxy = http.ProxyFromEnvironment
 	case p == "use-socks":
-		addr := net.JoinHostPort(strings.TrimSpace(cfg.Proxy.Address), strconv.Itoa(cfg.Proxy.Port))
-		var auth *proxy.Auth
-		if u, pass, ok := r.loadCreds(); ok && u != "" {
-			auth = &proxy.Auth{User: u, Password: pass}
-		}
-		if err := setSocksDialer(tr, addr, auth); err != nil {
-			return nil, err
+		if addr := strings.TrimSpace(cfg.Proxy.Address); addr != "" {
+			if err := setSocksDialer(tr, net.JoinHostPort(addr, strconv.Itoa(cfg.Proxy.Port)), auth); err != nil {
+				return nil, err
+			}
 		}
 	default:
 		pu, err := url.Parse(p)
@@ -114,7 +125,6 @@ func (r *Runtime) buildUpdateClient(cfg *config.Config) (*http.Client, error) {
 		case "http", "https":
 			tr.Proxy = http.ProxyURL(pu)
 		case "socks5":
-			var auth *proxy.Auth
 			if pu.User != nil {
 				pw, _ := pu.User.Password()
 				auth = &proxy.Auth{User: pu.User.Username(), Password: pw}
@@ -127,6 +137,20 @@ func (r *Runtime) buildUpdateClient(cfg *config.Config) (*http.Client, error) {
 		}
 	}
 	return &http.Client{Transport: tr, Timeout: 20 * time.Second}, nil
+}
+
+// loadStoredCreds reads DPAPI-encrypted SOCKS5 credentials from dataDir (nil if
+// none). Used by Install, which has no Runtime, for a use-socks engine download.
+func loadStoredCreds(dataDir string) *proxy.Auth {
+	blob, err := secretStore().LoadFrom(filepath.Join(dataDir, "creds.dpapi"))
+	if err != nil {
+		return nil
+	}
+	var c creds
+	if json.Unmarshal([]byte(blob), &c) != nil || c.User == "" {
+		return nil
+	}
+	return &proxy.Auth{User: c.User, Password: c.Pass}
 }
 
 func setSocksDialer(tr *http.Transport, addr string, auth *proxy.Auth) error {

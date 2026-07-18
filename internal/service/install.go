@@ -3,8 +3,10 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +17,8 @@ import (
 	"golang.org/x/sys/windows/svc/mgr"
 
 	"socksit/assets"
+	"socksit/internal/config"
+	"socksit/internal/enginedl"
 )
 
 // InstallDir is the stable location the service runs from: %ProgramFiles%\SocksIt.
@@ -57,12 +61,23 @@ func Install(currentExe string) error {
 	// Place the engine beside it. Embedded builds self-extract at runtime, so
 	// only non-embedded builds need the engine copied here.
 	if !assets.Embedded() {
-		src := locateEngine(currentExe)
-		if src == "" {
-			return fmt.Errorf("sing-box.exe not found next to %s — keep it alongside socksit.exe, or build with -tags embed_engine", currentExe)
-		}
-		if err := copyFile(src, filepath.Join(dir, "sing-box.exe")); err != nil {
-			return fmt.Errorf("copy engine: %w", err)
+		target := filepath.Join(dir, "sing-box.exe")
+		if src := locateEngine(currentExe); src != "" {
+			if err := copyFile(src, target); err != nil {
+				return fmt.Errorf("copy engine: %w", err)
+			}
+		} else {
+			// No local engine: download a verified sing-box.exe so a bare
+			// socksit.exe is self-sufficient (official source, SocksIt fallback).
+			client, err := engineDownloadClient()
+			if err != nil {
+				return fmt.Errorf("prepare engine download: %w", err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			if err := enginedl.Ensure(ctx, client, target); err != nil {
+				return fmt.Errorf("sing-box.exe was not found next to %s and could not be downloaded: %w", currentExe, err)
+			}
 		}
 	}
 
@@ -119,6 +134,18 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return out.Close()
+}
+
+// engineDownloadClient builds an HTTP client for the on-demand engine download,
+// honoring the configured update proxy (and any stored SOCKS5 credentials, for
+// update.proxy = use-socks).
+func engineDownloadClient() (*http.Client, error) {
+	dd := DataDir()
+	cfg := config.Default()
+	if b, err := os.ReadFile(filepath.Join(dd, "socksit.yaml")); err == nil {
+		cfg = config.ParseLenient(b)
+	}
+	return updateHTTPClient(cfg, loadStoredCreds(dd))
 }
 
 // Uninstall stops and removes the service.

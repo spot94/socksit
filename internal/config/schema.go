@@ -116,6 +116,7 @@ func Default() *Config {
 			Channel:       "stable",
 			Mode:          UpdateNotify,
 			CheckInterval: "24h",
+			Proxy:         "use-socks",
 		},
 	}
 }

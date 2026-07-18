@@ -36,4 +36,4 @@ update:
   channel: stable             # stable | beta
   mode: notify                # off | notify | auto
   check_interval: 24h         # min 1h
-  proxy: ""                   # "" direct | system | use-socks | socks5://host:port | http://host:port
+  proxy: use-socks            # "" direct | system | use-socks | socks5://host:port | http://host:port
