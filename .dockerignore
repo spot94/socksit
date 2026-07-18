@@ -1,0 +1,21 @@
+# Keep secrets and build artifacts OUT of the Docker build context / image (SEC-1).
+.git
+.github
+bin/
+*.exe
+*.dll
+assets/bin/*.exe
+assets/bin/*.dll
+# Secrets — never bake into an image
+build/keys/
+*.key
+*.key.b64
+.env
+.env.*
+*.env
+# Runtime data / logs (incl. any local server data dir)
+data/
+deploy/**/data/
+*.log
+# Windows client UI toolchain output not needed by the server build
+ui/**/node_modules/

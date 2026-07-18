@@ -1,0 +1,12 @@
+# Dev override: bind to localhost over plain HTTP (no TLS in development, per the
+# project rules). Use with:  --env-file .env.dev
+services:
+  configserver:
+    environment:
+      SECURE_COOKIES: "false"
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - configdata-dev:/data
+volumes:
+  configdata-dev:

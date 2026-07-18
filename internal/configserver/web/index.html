@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SocksIt — Config Server</title>
+<style>
+  :root{
+    --accent:#0e7c86; --accent-fg:#fff; --accent-weak:#0e7c8618;
+    --bg:#f4f6f8; --panel:#fff; --panel-2:#f8fafc; --text:#263038; --muted:#728492;
+    --border:#e2e8ee; --ok:#1a9c53; --warn:#c47d00; --bad:#c23a3a; --radius:12px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0e1216; --panel:#161c22; --panel-2:#1b232b; --text:#dce4eb; --muted:#90a2b0; --border:#26313b; --accent-weak:#0e7c8630; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.42 system-ui,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text)}
+  a{color:var(--accent)}
+  h1{font-size:20px;font-weight:500;margin:0}
+  h3{font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:0 0 8px}
+  .muted{color:var(--muted)} .mono{font-family:ui-monospace,Consolas,monospace}
+  .app{display:flex;min-height:100vh}
+  .side{width:220px;flex:0 0 220px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:16px 12px}
+  .brand{display:flex;align-items:center;gap:10px;padding:6px 8px 16px;font-weight:600}
+  .brand .logo{width:28px;height:28px;border-radius:8px;background:var(--accent);flex:0 0 auto}
+  .nav a{display:block;padding:9px 12px;border-radius:9px;color:var(--muted);cursor:pointer;font-weight:500;text-decoration:none}
+  .nav a:hover{background:var(--panel-2);color:var(--text)} .nav a.active{background:var(--accent-weak);color:var(--accent)}
+  .side .foot{margin-top:auto;border-top:1px solid var(--border);padding-top:12px}
+  .main{flex:1;padding:20px 24px;overflow:auto}
+  .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .section{display:none} .section.active{display:block}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-top:10px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  label.fld{display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.06em}
+  input,select,textarea{background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:9px 11px;font:inherit;outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+  textarea{resize:vertical;min-height:70px;font-family:ui-monospace,Consolas,monospace}
+  .switch{display:inline-flex;align-items:center;gap:8px;font-weight:500;cursor:pointer}
+  button{font:inherit;font-weight:500;border-radius:9px;padding:9px 15px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);cursor:pointer}
+  button:hover{border-color:var(--accent)} button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+  button.danger{color:var(--bad);border-color:transparent} button.danger:hover{border-color:var(--bad)}
+  .plist a{display:block;padding:8px 10px;border-radius:8px;cursor:pointer;font-weight:500}
+  .plist a:hover{background:var(--panel-2)} .plist a.active{background:var(--accent-weak);color:var(--accent)}
+  .banner{border-radius:9px;padding:9px 12px;font-size:13px;margin-top:10px;display:none;white-space:pre-line}
+  .banner.ok{background:#1a9c5322;color:var(--ok);display:block} .banner.err{background:#c23a3a22;color:var(--bad);display:block} .banner.info{background:var(--panel-2);display:block}
+  table{width:100%;border-collapse:collapse;font-size:13px} th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.05em;font-size:11px}
+  .center{min-height:100vh;display:flex;align-items:center;justify-content:center}
+  .authbox{width:360px;max-width:92vw;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:22px}
+  .authbox h1{margin-bottom:4px} .authbox .sub{color:var(--muted);margin-bottom:14px}
+  .snippet{background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:10px;white-space:pre;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
+  .pill{font-size:11px;font-weight:500;padding:3px 9px;border-radius:999px;background:var(--panel-2);border:1px solid var(--border);color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div id="screen-auth" class="center" style="display:none">
+  <div class="authbox">
+    <h1 id="authTitle">Sign in</h1>
+    <div class="sub" id="authSub">Config server administration</div>
+    <label class="fld">Password<input type="password" id="authPw" autocomplete="current-password"></label>
+    <div class="banner" id="authBanner"></div>
+    <div class="row" style="margin-top:12px"><button class="primary" id="authBtn" style="flex:1">Sign in</button></div>
+  </div>
+</div>
+
+<div id="screen-app" class="app" style="display:none">
+  <aside class="side">
+    <div class="brand"><div class="logo"></div>SocksIt Config</div>
+    <nav class="nav" id="nav">
+      <a data-sec="profiles" class="active">Profiles</a>
+      <a data-sec="key">Signing key</a>
+      <a data-sec="audit">Audit log</a>
+    </nav>
+    <div class="foot"><button id="btnLogout" style="width:100%">Log out</button></div>
+  </aside>
+  <main class="main">
+    <section class="section active" id="sec-profiles">
+      <div class="head"><h1>Profiles</h1><button id="btnNewProfile">New profile</button></div>
+      <div class="row" style="align-items:flex-start;gap:16px">
+        <div class="card" style="width:200px;flex:0 0 auto"><h3>Profiles</h3><div class="plist" id="plist"></div></div>
+        <div class="card" style="flex:1;min-width:320px;display:none" id="editorCard">
+          <h3>Edit profile</h3>
+          <div class="row" style="margin-bottom:8px"><span class="pill" id="pName">—</span></div>
+          <div class="grid">
+            <label class="fld">Proxy address<input type="text" id="fAddr" placeholder="10.0.0.1"></label>
+            <label class="fld">Port<input type="number" id="fPort" value="1080"></label>
+            <label class="fld">Mode<select id="fMode"><option value="allowlist">allowlist</option><option value="blocklist">blocklist</option></select></label>
+            <label class="fld">Fake-IP v4<input type="text" id="fFake" value="198.18.0.0/15"></label>
+          </div>
+          <div class="row" style="margin-top:10px;gap:22px">
+            <label class="switch"><input type="checkbox" id="fUdp" checked> Proxy UDP</label>
+            <label class="switch"><input type="checkbox" id="fKill" checked> Kill-switch</label>
+          </div>
+          <div class="grid" style="margin-top:10px">
+            <label class="fld">Apps (one per line)<textarea id="fApps" placeholder="chrome.exe&#10;Telegram.exe"></textarea></label>
+            <label class="fld">Direct subnets (one per line)<textarea id="fSubnets" placeholder="192.168.1.0/24"></textarea></label>
+          </div>
+          <div class="banner" id="editBanner"></div>
+          <div class="row" style="margin-top:12px"><button class="primary" id="btnSaveProfile">Save &amp; sign</button><button class="danger" id="btnDeleteProfile">Delete</button></div>
+          <h3 style="margin-top:16px">Client snippet (config_source)</h3>
+          <div class="snippet" id="snippet">—</div>
+          <div class="row" style="margin-top:8px"><button id="btnCopySnippet">Copy</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="sec-key">
+      <div class="head"><h1>Signing key</h1></div>
+      <div class="card">
+        <h3>Public key (config_source.pubkey)</h3>
+        <div class="snippet" id="pubKey">—</div>
+        <div class="row" style="margin-top:8px"><button id="btnCopyPub">Copy</button></div>
+        <div class="banner info" style="display:block;margin-top:12px">Rotating the key re-signs every profile — all clients must update their <span class="mono">config_source.pubkey</span> to the new value.</div>
+        <div class="row" style="margin-top:12px"><button class="primary" id="btnGenKey">Generate new key</button></div>
+        <h3 style="margin-top:18px">Import existing key</h3>
+        <label class="fld">Base64 Ed25519 private key (from <span class="mono">mksign genkey</span>)<input type="text" id="fImportKey" class="mono" placeholder="base64 64-byte private key"></label>
+        <div class="row" style="margin-top:10px"><button id="btnImportKey">Import &amp; re-sign</button></div>
+        <div class="banner" id="keyBanner"></div>
+      </div>
+    </section>
+
+    <section class="section" id="sec-audit">
+      <div class="head"><h1>Audit log</h1><button id="btnReloadAudit">Refresh</button></div>
+      <div class="card"><table><thead><tr><th>Time (UTC)</th><th>Action</th><th>Object</th><th>IP</th></tr></thead><tbody id="auditBody"></tbody></table></div>
+    </section>
+  </main>
+</div>
+
+<script>
+let csrf = '';
+const $ = s => document.querySelector(s);
+async function api(path, method='GET', body){
+  const opt = { method, credentials:'same-origin', headers:{} };
+  if(body!==undefined){ opt.headers['Content-Type']='application/json'; opt.body=JSON.stringify(body); }
+  if(method!=='GET' && method!=='HEAD') opt.headers['X-CSRF-Token']=csrf;
+  const r = await fetch(path, opt);
+  const txt = await r.text();
+  let data; try{ data = txt?JSON.parse(txt):{}; }catch(_){ data = {error:txt}; }
+  if(!r.ok) throw new Error(data.error || txt || ('HTTP '+r.status));
+  return data;
+}
+function show(el, on){ el.style.display = on?'':'none'; }
+function banner(el, kind, msg){ el.className='banner '+kind; el.textContent=msg; }
+
+/* ---- auth flow ---- */
+let mode = 'login';
+async function boot(){
+  const s = await api('/api/session');
+  if(s.authenticated){ csrf = s.csrf; enterApp(); return; }
+  mode = s.hasAdmin ? 'login' : 'setup';
+  $('#authTitle').textContent = mode==='setup' ? 'Create admin' : 'Sign in';
+  $('#authSub').textContent = mode==='setup' ? 'Set the first-run administrator password.' : 'Config server administration';
+  $('#authBtn').textContent = mode==='setup' ? 'Create admin' : 'Sign in';
+  $('#authPw').setAttribute('autocomplete', mode==='setup'?'new-password':'current-password');
+  show($('#screen-auth'), true); show($('#screen-app'), false);
+  $('#authPw').focus();
+}
+$('#authBtn').onclick = async () => {
+  const pw = $('#authPw').value;
+  try{
+    const r = await api(mode==='setup'?'/api/setup':'/api/login', 'POST', {password:pw});
+    csrf = r.csrf; enterApp();
+  }catch(e){ banner($('#authBanner'),'err', e.message); }
+};
+$('#authPw').addEventListener('keydown', e=>{ if(e.key==='Enter') $('#authBtn').click(); });
+$('#btnLogout').onclick = async () => { try{ await api('/api/logout','POST',{}); }catch(_){}; location.reload(); };
+
+function enterApp(){ show($('#screen-auth'), false); show($('#screen-app'), true); loadProfiles(); loadKey(); }
+
+/* ---- nav ---- */
+document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>{
+  document.querySelectorAll('#nav a').forEach(x=>x.classList.remove('active')); a.classList.add('active');
+  const sec=a.dataset.sec;
+  document.querySelectorAll('.section').forEach(x=>x.classList.remove('active'));
+  $('#sec-'+sec).classList.add('active');
+  if(sec==='audit') loadAudit(); if(sec==='key') loadKey();
+});
+
+/* ---- profiles ---- */
+let current = null, pubKey = '';
+async function loadProfiles(){
+  const {profiles} = await api('/api/profiles');
+  const box = $('#plist'); box.innerHTML='';
+  if(!profiles || !profiles.length){ box.innerHTML='<div class="muted" style="padding:8px">No profiles yet.</div>'; }
+  (profiles||[]).forEach(n=>{ const a=document.createElement('a'); a.textContent=n; if(n===current) a.classList.add('active'); a.onclick=()=>selectProfile(n); box.appendChild(a); });
+}
+async function selectProfile(name){
+  current = name;
+  const v = await api('/api/profiles/'+encodeURIComponent(name));
+  $('#pName').textContent = name;
+  $('#fAddr').value=v.address||''; $('#fPort').value=v.port||1080; $('#fMode').value=v.mode||'allowlist';
+  $('#fFake').value=v.fakeIPv4||'198.18.0.0/15'; $('#fUdp').checked=!!v.udp; $('#fKill').checked=!!v.killSwitch;
+  $('#fApps').value=(v.apps||[]).join('\n'); $('#fSubnets').value=(v.subnets||[]).join('\n');
+  show($('#editorCard'), true); banner($('#editBanner'),'',''); $('#editBanner').className='banner';
+  renderSnippet(); loadProfiles();
+}
+function collect(){
+  const lines = s => (s||'').split('\n').map(x=>x.trim()).filter(Boolean);
+  return { address:$('#fAddr').value.trim(), port:parseInt($('#fPort').value||'1080',10), mode:$('#fMode').value,
+    fakeIPv4:$('#fFake').value.trim(), udp:$('#fUdp').checked, killSwitch:$('#fKill').checked,
+    apps:lines($('#fApps').value), subnets:lines($('#fSubnets').value) };
+}
+$('#btnSaveProfile').onclick = async () => {
+  try{ await api('/api/profiles/'+encodeURIComponent(current),'POST',collect()); banner($('#editBanner'),'ok','Saved and signed.'); renderSnippet(); }
+  catch(e){ banner($('#editBanner'),'err', e.message); }
+};
+$('#btnDeleteProfile').onclick = async () => {
+  if(!confirm('Delete profile "'+current+'"?')) return;
+  try{ await api('/api/profiles/'+encodeURIComponent(current),'DELETE'); current=null; show($('#editorCard'),false); loadProfiles(); }
+  catch(e){ banner($('#editBanner'),'err', e.message); }
+};
+$('#btnNewProfile').onclick = async () => {
+  const name = (prompt('Profile name (lowercase letters, digits, hyphens):')||'').trim();
+  if(!name) return;
+  if(!/^[a-z0-9][a-z0-9-]{0,39}$/.test(name)){ alert('Invalid name.'); return; }
+  current = name;
+  $('#pName').textContent=name; $('#fAddr').value=''; $('#fPort').value=1080; $('#fMode').value='allowlist';
+  $('#fFake').value='198.18.0.0/15'; $('#fUdp').checked=true; $('#fKill').checked=true; $('#fApps').value=''; $('#fSubnets').value='';
+  show($('#editorCard'),true); banner($('#editBanner'),'info','New profile — fill in and Save & sign.'); renderSnippet();
+};
+function renderSnippet(){
+  if(!current){ $('#snippet').textContent='—'; return; }
+  const url = location.origin + '/configs/' + current + '/socksit.yaml';
+  $('#snippet').textContent =
+    'config_source:\n' +
+    '  url: ' + url + '\n' +
+    '  pubkey: ' + (pubKey || '<generate a signing key first>') + '\n' +
+    '  signed: true\n' +
+    '  merge: replace';
+}
+$('#btnCopySnippet').onclick = ()=>navigator.clipboard && navigator.clipboard.writeText($('#snippet').textContent);
+
+/* ---- key ---- */
+async function loadKey(){
+  const k = await api('/api/key'); pubKey = k.publicKey||'';
+  $('#pubKey').textContent = pubKey || 'No signing key yet — generate or import one.';
+  renderSnippet();
+}
+$('#btnGenKey').onclick = async () => {
+  if(!confirm('Generate a NEW key? Every profile is re-signed and all clients must update their pubkey.')) return;
+  try{ const r=await api('/api/key/generate','POST',{}); pubKey=r.publicKey; $('#pubKey').textContent=pubKey; banner($('#keyBanner'),'ok','New key generated; profiles re-signed.'); renderSnippet(); }
+  catch(e){ banner($('#keyBanner'),'err', e.message); }
+};
+$('#btnImportKey').onclick = async () => {
+  try{ const r=await api('/api/key/import','POST',{privateKey:$('#fImportKey').value.trim()}); pubKey=r.publicKey; $('#pubKey').textContent=pubKey; $('#fImportKey').value=''; banner($('#keyBanner'),'ok','Key imported; profiles re-signed.'); renderSnippet(); }
+  catch(e){ banner($('#keyBanner'),'err', e.message); }
+};
+$('#btnCopyPub').onclick = ()=>navigator.clipboard && navigator.clipboard.writeText(pubKey);
+
+/* ---- audit ---- */
+async function loadAudit(){
+  const {entries} = await api('/api/audit'); const b=$('#auditBody'); b.innerHTML='';
+  (entries||[]).forEach(e=>{ const tr=document.createElement('tr');
+    tr.innerHTML='<td class="mono">'+esc(e.time)+'</td><td>'+esc(e.action)+'</td><td>'+esc(e.object)+'</td><td class="mono muted">'+esc(e.ip)+'</td>'; b.appendChild(tr); });
+}
+$('#btnReloadAudit').onclick = loadAudit;
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+boot().catch(e=>{ document.body.innerHTML='<div class="center"><div class="authbox"><h1>Error</h1><div class="sub">'+esc(e.message)+'</div></div></div>'; });
+</script>
+</body>
+</html>

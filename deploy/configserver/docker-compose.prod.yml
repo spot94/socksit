@@ -1,0 +1,19 @@
+# Prod override: no host port — the server is reachable only through a
+# TLS-terminating reverse proxy on the shared "edge" network, which forwards
+# X-Forwarded-Proto so Secure cookies are honoured. Config the proxy to route
+# your public host to configserver:8080. Use with:  --env-file .env.prod
+services:
+  configserver:
+    environment:
+      SECURE_COOKIES: "true"
+    expose:
+      - "8080"
+    networks:
+      - edge
+    volumes:
+      - configdata-prod:/data
+networks:
+  edge:
+    external: true
+volumes:
+  configdata-prod:

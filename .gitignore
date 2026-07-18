@@ -29,3 +29,10 @@ socksit.yaml
 # Editor/OS
 .DS_Store
 Thumbs.db
+
+# configserver: per-environment secrets + local data (never commit; .env.example is tracked)
+/deploy/configserver/.env
+/deploy/configserver/.env.*
+!/deploy/configserver/.env.example
+/deploy/configserver/data/
+/data/

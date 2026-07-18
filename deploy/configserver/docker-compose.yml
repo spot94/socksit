@@ -1,0 +1,23 @@
+# Base compose for the SocksIt config server. Combine with an env-specific
+# override, e.g.:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev up -d
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d
+services:
+  configserver:
+    build:
+      context: ../..
+      dockerfile: deploy/configserver/Dockerfile
+    image: socksit-configserver:latest
+    restart: unless-stopped
+    environment:
+      LISTEN: ":8080"
+      IDLE_TIMEOUT: "30m"
+      # ADMIN_PASSWORD (from the env file / a docker secret) bootstraps the admin on
+      # first run. Omit it to instead set the password via the first-run web page.
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      # Set true only when a TLS-terminating reverse proxy sits in front.
+      SECURE_COOKIES: "${SECURE_COOKIES:-false}"
+    volumes:
+      - configdata:/data
+volumes:
+  configdata:
