@@ -93,19 +93,25 @@ func (r *Runtime) lenientConfig() *config.Config {
 // buildUpdateClient constructs an HTTP client honoring update.proxy, injecting
 // the stored SOCKS5 credentials for use-socks.
 func (r *Runtime) buildUpdateClient(cfg *config.Config) (*http.Client, error) {
+	return r.buildProxyClient(cfg.Update.Proxy, cfg)
+}
+
+// buildProxyClient builds an HTTP client for an arbitrary proxy mode (update.proxy
+// or config_source.proxy), injecting the stored SOCKS5 credentials for use-socks.
+func (r *Runtime) buildProxyClient(mode string, cfg *config.Config) (*http.Client, error) {
 	var auth *proxy.Auth
 	if u, pass, ok := r.loadCreds(); ok && u != "" {
 		auth = &proxy.Auth{User: u, Password: pass}
 	}
-	return updateHTTPClient(cfg, auth)
+	return updateHTTPClient(mode, cfg, auth)
 }
 
-// updateHTTPClient builds the client for update/engine fetches per cfg.Update.Proxy.
-// For use-socks with no proxy configured yet it connects directly, so a first-run
-// engine download still works before the proxy is set up.
-func updateHTTPClient(cfg *config.Config, auth *proxy.Auth) (*http.Client, error) {
+// updateHTTPClient builds an HTTP client for the given proxy mode. cfg supplies the
+// SOCKS address for use-socks. For use-socks with no proxy configured yet it
+// connects directly, so a first-run engine download still works.
+func updateHTTPClient(mode string, cfg *config.Config, auth *proxy.Auth) (*http.Client, error) {
 	tr := &http.Transport{}
-	switch p := strings.TrimSpace(cfg.Update.Proxy); {
+	switch p := strings.TrimSpace(mode); {
 	case p == "":
 		// direct
 	case p == "system":
@@ -119,7 +125,7 @@ func updateHTTPClient(cfg *config.Config, auth *proxy.Auth) (*http.Client, error
 	default:
 		pu, err := url.Parse(p)
 		if err != nil {
-			return nil, fmt.Errorf("update.proxy: %w", err)
+			return nil, fmt.Errorf("proxy: %w", err)
 		}
 		switch pu.Scheme {
 		case "http", "https":
@@ -133,7 +139,7 @@ func updateHTTPClient(cfg *config.Config, auth *proxy.Auth) (*http.Client, error
 				return nil, err
 			}
 		default:
-			return nil, fmt.Errorf("update.proxy: unsupported scheme %q", pu.Scheme)
+			return nil, fmt.Errorf("proxy: unsupported scheme %q", pu.Scheme)
 		}
 	}
 	return &http.Client{Transport: tr, Timeout: 20 * time.Second}, nil

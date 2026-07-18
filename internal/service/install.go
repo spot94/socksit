@@ -145,7 +145,7 @@ func engineDownloadClient() (*http.Client, error) {
 	if b, err := os.ReadFile(filepath.Join(dd, "socksit.yaml")); err == nil {
 		cfg = config.ParseLenient(b)
 	}
-	return updateHTTPClient(cfg, loadStoredCreds(dd))
+	return updateHTTPClient(cfg.Update.Proxy, cfg, loadStoredCreds(dd))
 }
 
 // Uninstall stops and removes the service.

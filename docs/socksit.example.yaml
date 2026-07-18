@@ -48,3 +48,6 @@ config_source:                # optional "managed config": pull this file from a
   pubkey: ""                  # YOUR base64 Ed25519 public key (from `mksign genkey`) that
                               # verifies the feed. Operator-provisioned, not the app author's.
                               # sign configs with the matching private key: mksign sign-config
+  proxy: ""                   # how to REACH the feed: "" direct (default) | system | use-socks |
+                              # socks5://host:port | http://host:port. Direct by default — the
+                              # feed must not tunnel through the SOCKS proxy it configures.

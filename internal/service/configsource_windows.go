@@ -80,7 +80,10 @@ func (r *Runtime) fetchConfig(ctx context.Context) (configFetchResult, error) {
 		r.lastConfig.Store(&res)
 		return res, nil
 	}
-	client, err := r.buildUpdateClient(cfg)
+	// Reach the feed per config_source.proxy — direct by default. The config server
+	// is usually inside the perimeter, so it must NOT tunnel through the SOCKS proxy
+	// it configures (that fails for e.g. a loopback URL).
+	client, err := r.buildProxyClient(cfg.ConfigSource.Proxy, cfg)
 	if err != nil {
 		res.Error = err.Error()
 		r.lastConfig.Store(&res)

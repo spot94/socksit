@@ -82,6 +82,12 @@ type ConfigSource struct {
 	// `mksign genkey`, put the public half here, sign configs with the private half.
 	// It is preserved across remote fetches, so a hostile server can't replace it.
 	PubKey string `yaml:"pubkey"`
+	// Proxy selects how the FEED itself is reached: "" (direct, default) | system |
+	// use-socks | socks5://host:port | http://host:port. It defaults to direct
+	// because the config server usually lives inside the perimeter — the feed must
+	// NOT tunnel through the very SOCKS proxy it is configuring (that fails, e.g.
+	// a loopback URL). Separate from update.proxy on purpose.
+	Proxy string `yaml:"proxy,omitempty"`
 }
 
 // Update modes.
@@ -331,6 +337,24 @@ func (c *Config) Validate() error {
 	if m := strings.TrimSpace(c.ConfigSource.Merge); m != "" && !strings.EqualFold(m, MergeReplace) && !strings.EqualFold(m, MergeOverride) {
 		return fmt.Errorf("config_source.merge: must be %q or %q, got %q", MergeReplace, MergeOverride, m)
 	}
+	if err := validateProxySpec("config_source.proxy", c.ConfigSource.Proxy); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateProxySpec checks a proxy-mode string shared by update.proxy and
+// config_source.proxy: "" (direct) | system | use-socks | socks5://host:port |
+// http(s)://host:port.
+func validateProxySpec(field, p string) error {
+	p = strings.TrimSpace(p)
+	if p == "" || p == "system" || p == "use-socks" {
+		return nil
+	}
+	u, err := url.Parse(p)
+	if err != nil || u.Host == "" || (u.Scheme != "socks5" && u.Scheme != "http" && u.Scheme != "https") {
+		return fmt.Errorf("%s: must be '', system, use-socks, or socks5://host:port / http://host:port, got %q", field, p)
+	}
 	return nil
 }
 
@@ -343,11 +367,8 @@ func (c *Config) validateUpdate() error {
 	if _, err := time.ParseDuration(c.Update.CheckInterval); err != nil {
 		return fmt.Errorf("update.check_interval: invalid duration %q: %w", c.Update.CheckInterval, err)
 	}
-	if p := strings.TrimSpace(c.Update.Proxy); p != "" && p != "system" && p != "use-socks" {
-		u, err := url.Parse(p)
-		if err != nil || u.Host == "" || (u.Scheme != "socks5" && u.Scheme != "http" && u.Scheme != "https") {
-			return fmt.Errorf("update.proxy: must be '', system, use-socks, or socks5://host:port / http://host:port, got %q", p)
-		}
+	if err := validateProxySpec("update.proxy", c.Update.Proxy); err != nil {
+		return err
 	}
 	if e := strings.TrimSpace(c.Update.Endpoint); e != "" {
 		u, err := url.Parse(e)

@@ -77,6 +77,9 @@ mutating requests and brute-force lockout on the login.
      pubkey: <public key from step 1>
      signed: true
      merge: replace        # or override
+     # proxy: ""           # how to reach the feed; empty = direct (default). The feed
+                           # must NOT go through the SOCKS proxy it configures — leave
+                           # this empty unless the config server is only reachable via a proxy.
    ```
 
 Clients fetch on start and on their interval, verify the signature against
