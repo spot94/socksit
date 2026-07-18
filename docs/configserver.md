@@ -1,202 +1,203 @@
-# SocksIt Config Server
+# Конфиг-сервер SocksIt
 
-The server half of SocksIt's managed-config channel. It hosts **signed
-`socksit.yaml` feeds** that clients pull (`config_source`), and an **authenticated
-web admin** to edit those feeds and manage the **Ed25519 signing key**. It runs as
-a Docker container; TLS is terminated by a reverse proxy in front (no TLS in the
-container itself).
+Серверная половина канала управляемого конфига SocksIt. Раздаёт **подписанные фиды
+`socksit.yaml`**, которые тянут клиенты (`config_source`), и **веб-админку с
+авторизацией** для их редактирования и управления **ключом подписи Ed25519**.
+Работает Docker-контейнером; TLS терминирует обратный прокси перед ним (в самом
+контейнере TLS нет).
 
-## What it does
+## Что он делает
 
-- **Public feed (no auth, integrity via signature):**
-  - `GET /configs/<profile>/socksit.yaml`
-  - `GET /configs/<profile>/socksit.yaml.sig`
+- **Публичный фид (без авторизации, целостность — через подпись):**
+  - `GET /configs/<профиль>/socksit.yaml`
+  - `GET /configs/<профиль>/socksit.yaml.sig`
   - `GET /healthz`
-- **Admin (login required):** create/edit/delete named profiles, generate/import/
-  rotate the signing key, view the audit log, configure LDAP. Two roles —
-  **Administrator** (everything) and **Operator** (routing only) — see
-  [Authentication & roles](#authentication--roles) below.
+- **Админка (нужен вход):** создание/редактирование/удаление именованных профилей,
+  генерация/импорт/ротация ключа подписи, просмотр аудит-лога, настройка LDAP. Две
+  роли — **Администратор** (всё) и **Оператор** (только маршрутизация) — см.
+  [Аутентификация и роли](#аутентификация-и-роли) ниже.
 
-Each **profile** is an independent feed at its own URL (e.g. `team-a`, `team-b`)
-with its own app set — different groups get different configs. All profiles are
-signed by the one server key.
+Каждый **профиль** — независимый фид по своему URL (например `team-a`, `team-b`) со
+своим набором приложений: разные группы получают разные конфиги. Все профили
+подписаны одним ключом сервера.
 
-The served config carries only **routing** fields (proxy address/port/udp, apps,
-mode, kill-switch, direct subnets). Kill-switch and Proxy UDP are **tri-state** on
-the server: `on`/`off` force the value and lock that toggle on clients, while
-`user-defined` leaves the field out of the feed so each client controls it. It
-never carries the SOCKS
-**credentials** (those stay on each client, DPAPI-encrypted) or client-local
-policy like `config_source`/`update`. Feeds are validated with the *exact* client
-schema (`internal/config`) before signing, so a client can never receive an
-invalid config.
+Раздаваемый конфиг несёт только поля **маршрутизации** (адрес/порт/udp прокси,
+приложения, режим, kill-switch, прямые подсети). Kill-switch и Proxy UDP на сервере
+**трёхпозиционные**: `on`/`off` форсируют значение и блокируют тумблер на клиентах, а
+`user-defined` не кладёт поле в фид — каждый клиент решает сам. Он **никогда** не несёт
+**учётные данные** SOCKS (они остаются на каждом клиенте, зашифрованы DPAPI) и
+клиентские политики вроде `config_source`/`update`. Фиды проверяются *той же* клиентской
+схемой (`internal/config`) перед подписью, поэтому клиент не может получить невалидный
+конфиг.
 
-## Run (Docker)
+## Запуск (Docker)
 
-By default the compose **pulls the image from GHCR**
-(`ghcr.io/spot94/socksit-configserver:latest`), built by
-`.github/workflows/configserver-image.yml` on every push to `main` (`:latest`) and
-on version tags (`:X.Y.Z`). GHCR packages start private — after the first push,
-make the package public (repo → Packages → Package settings → visibility) or run
-`docker login ghcr.io` on the host.
+По умолчанию compose **тянет образ из GHCR**
+(`ghcr.io/spot94/socksit-configserver:latest`), собираемый
+`.github/workflows/configserver-image.yml` при каждом push в `main` (`:latest`) и на
+тегах версий (`:X.Y.Z`). Пакеты GHCR по умолчанию приватные — после первого push
+сделайте пакет публичным (repo → Packages → Package settings → visibility) или
+выполните `docker login ghcr.io` на хосте.
 
 ```bash
 cd deploy/configserver
-cp .env.example .env.dev          # set ADMIN_PASSWORD or leave empty for first-run
+cp .env.example .env.dev          # задайте ADMIN_PASSWORD или оставьте пустым для first-run
 docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev up -d
-# → http://127.0.0.1:8080  (pull_policy: always keeps :latest fresh)
+# → http://127.0.0.1:8080  (pull_policy: always держит :latest свежим)
 ```
 
-Production (behind a TLS reverse proxy on an external `edge` network):
+Прод (за TLS-терминирующим обратным прокси во внешней сети `edge`):
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d
 ```
 
-Pin a version with `CONFIGSERVER_IMAGE=ghcr.io/spot94/socksit-configserver:0.1.5`
-in the env file.
+Зафиксировать версию — `CONFIGSERVER_IMAGE=ghcr.io/spot94/socksit-configserver:0.1.5`
+в env-файле.
 
-To **build the image locally** instead of pulling (the build context is the repo
-root — the server shares `internal/config` with the client), add the build
-override and pass `--build`:
+Чтобы **собрать образ локально** вместо скачивания (контекст сборки — корень
+репозитория: сервер делит `internal/config` с клиентом), добавьте build-override и
+`--build`:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.build.yml -f docker-compose.dev.yml --env-file .env.dev up -d --build
 ```
 
-`dev` / `test` / `prod` each use their own env file, volume and password so they
-stay independent.
+`dev` / `test` / `prod` — каждый со своим env-файлом, томом и паролем, поэтому
+окружения независимы.
 
-### Configuration (env)
+### Настройки (env)
 
-| Var | Default | Meaning |
+| Переменная | По умолч. | Значение |
 |-----|---------|---------|
-| `LISTEN` | `:8080` | listen address |
-| `DATA_DIR` | `/data` | volume for key, profiles, admin, audit |
-| `ADMIN_PASSWORD` | – | bootstrap admin on first run; empty → set via first-run page |
-| `SECURE_COOKIES` | `false` | `true` only behind TLS (prod) |
-| `IDLE_TIMEOUT` | `30m` | session inactivity timeout |
+| `LISTEN` | `:8080` | адрес прослушивания |
+| `DATA_DIR` | `/data` | том для ключа, профилей, админа, аудита |
+| `ADMIN_PASSWORD` | – | бутстрап админа на первом запуске; пусто → задать на first-run-странице |
+| `SECURE_COOKIES` | `false` | `true` только за TLS (прод) |
+| `IDLE_TIMEOUT` | `30m` | таймаут бездействия сессии |
 
-## First-run
+## Первый запуск (first-run)
 
-Open the URL. If `ADMIN_PASSWORD` was set, log in with it; otherwise the first-run
-page prompts you to create the admin password (min 10 chars). Sessions are
-cookie-based (HttpOnly, SameSite=Strict, Secure in prod) with CSRF tokens on
-mutating requests and brute-force lockout on the login.
+Откройте URL. Если задан `ADMIN_PASSWORD` — войдите с ним; иначе first-run-страница
+предложит создать пароль администратора (мин. 10 символов). Сессии на cookie
+(HttpOnly, SameSite=Strict, Secure в проде) с CSRF-токенами на изменяющих запросах и
+блокировкой перебора на входе.
 
-## Authentication & roles
+## Аутентификация и роли
 
-There are two ways to sign in and two roles:
+Два способа входа и две роли:
 
-- **Local administrator** — the bootstrap account from first-run (always available,
-  cannot be disabled). Always has the **Administrator** role.
-- **LDAP** — optional, configured in the **LDAP** section of the admin UI (only the
-  local admin, or an LDAP administrator, can open it). Meant for Active Directory.
+- **Локальный администратор** — bootstrap-аккаунт из first-run (всегда доступен,
+  отключить нельзя). Всегда роль **Администратор**.
+- **LDAP** — опционально, настраивается в разделе **LDAP** админки (открыть может
+  только локальный админ или LDAP-администратор). Рассчитан на Active Directory.
 
-**Roles.**
+**Роли.**
 
-| | Administrator | Operator |
+| | Администратор | Оператор |
 |---|---|---|
-| Edit profiles (proxy/apps/subnets/mode/kill-switch) | ✓ | ✓ |
-| Signing-key generate/import/rotate | ✓ | — |
-| Per-profile **Migration** block | ✓ | — |
-| Audit log | ✓ | — |
-| LDAP configuration | ✓ | — |
+| Редактировать профили (прокси/приложения/подсети/режим/kill-switch) | ✓ | ✓ |
+| Генерация/импорт/ротация ключа подписи | ✓ | — |
+| Блок **Миграции** профиля | ✓ | — |
+| Аудит-лог | ✓ | — |
+| Настройка LDAP | ✓ | — |
 
-The Operator restrictions are enforced **server-side** (the key/audit/LDAP endpoints
-require the Administrator role → `403`; a Save from an operator keeps the profile's
-existing migration untouched), and mirrored in the UI (those nav items and the
-migration editor are hidden). The local admin is always an Administrator, so an
-LDAP misconfiguration can never lock you out of key/LDAP management.
+Ограничения Оператора действуют **на стороне сервера** (эндпоинты ключа/аудита/LDAP
+требуют роль Администратор → `403`; сохранение от оператора не трогает существующую
+миграцию профиля) и продублированы в UI (эти пункты меню и редактор миграции скрыты).
+Локальный админ всегда Администратор, поэтому ошибка в настройке LDAP не может лишить
+вас доступа к управлению ключом/LDAP.
 
-### LDAP setup (Active Directory)
+### Настройка LDAP (Active Directory)
 
-Open **LDAP** in the sidebar (Administrator only) and fill in:
+Откройте **LDAP** в боковом меню (только Администратор) и заполните:
 
-| Field | Example | Notes |
+| Поле | Пример | Примечания |
 |-------|---------|-------|
-| Enabled | on | when on, the login page shows an **LDAP** tab next to **Local admin** |
-| URL | `ldaps://dc.corp.local:636` | `ldap://` or `ldaps://`; StartTLS toggle for `ldap://:389` |
-| Skip TLS verify | off | only for lab CAs; leave off in prod |
-| Bind DN / password | `CN=svc-socksit,OU=Svc,DC=corp,DC=local` | a **service account** used to search for users; the password is write-only (never returned by the API) |
-| Base DN | `DC=corp,DC=local` | subtree searched for the user |
-| User filter | `(sAMAccountName={user})` | must contain `{user}` — replaced (escaped) with the typed username |
-| Administrator filter | `(memberOf=CN=SocksIt-Admins,OU=Groups,DC=corp,DC=local)` | matched against the found user's own entry |
-| Operator filter | `(memberOf=CN=SocksIt-Operators,OU=Groups,DC=corp,DC=local)` | matched the same way |
-| Display attribute | `displayName` | shown next to **Log out** for LDAP users |
+| Enabled | on | когда включено, на странице входа появляется вкладка **LDAP** рядом с **Локальный админ** |
+| URL | `ldaps://dc.corp.local:636` | `ldap://` или `ldaps://`; для `ldap://:389` — тумблер StartTLS |
+| Skip TLS verify | off | только для лабораторных CA; в проде — off |
+| Bind DN / пароль | `CN=svc-socksit,OU=Svc,DC=corp,DC=local` | **сервис-аккаунт** для поиска пользователей; пароль write-only (API его не возвращает) |
+| Base DN | `DC=corp,DC=local` | поддерево, в котором ищется пользователь |
+| User filter | `(sAMAccountName={user})` | обязан содержать `{user}` — туда подставляется (экранированное) введённое имя |
+| Administrator filter | `(memberOf=CN=SocksIt-Admins,OU=Groups,DC=corp,DC=local)` | проверяется против записи самого пользователя |
+| Operator filter | `(memberOf=CN=SocksIt-Operators,OU=Groups,DC=corp,DC=local)` | так же |
+| Display attribute | `displayName` | показывается рядом с **Выход** для LDAP-пользователей |
 
-Login flow (service-account bind): the server binds as the service account, searches
-Base DN with the user filter, **re-binds as the user** to verify the password, then
-decides the role — Administrator filter first, else Operator filter; a user matching
-neither is refused. **Test connection** does a service bind without touching a user.
+Схема входа (bind сервис-аккаунтом): сервер биндится сервис-аккаунтом, ищет в Base DN
+по user-фильтру, **пере-биндится под пользователем** для проверки пароля, затем
+определяет роль — сначала Administrator-фильтр, иначе Operator-фильтр; не подошедший ни
+под один отклоняется. **Проверить соединение** делает bind сервис-аккаунта, не трогая
+пользователя.
 
-The LDAP config (including the bind password) is stored in `ldap.json` on the `/data`
-volume (`0600`) — treat that volume as secret. Failed LDAP logins share the same
-per-IP brute-force lockout as the local login. The signed-in identity (local admin
-name or LDAP `displayName`, plus a role badge) is shown next to **Log out**.
+Конфиг LDAP (включая пароль bind) хранится в `ldap.json` на томе `/data` (`0600`) —
+считайте том секретным. Неудачные LDAP-входы делят ту же per-IP блокировку перебора, что
+и локальный вход. Имя вошедшего (локального админа или LDAP `displayName`, плюс бейдж
+роли) показывается рядом с **Выход**.
 
-## Set up a feed
+## Настройка фида
 
-1. **Signing key** → *Generate new key* (or *Import* a key from `mksign genkey`).
-   Copy the shown **public key**.
-2. **Profiles** → *New profile*, fill in proxy/apps/mode/…, **Save & sign**.
-3. Copy the **Client snippet** and put it in each client's `socksit.yaml`:
+1. **Ключ подписи** → *Сгенерировать новый* (или *Импортировать* ключ из
+   `mksign genkey`). Скопируйте показанный **публичный ключ**.
+2. **Профили** → *Новый профиль*, заполните прокси/приложения/режим/…,
+   **Сохранить и подписать**.
+3. Скопируйте **сниппет для клиента** и вставьте в `socksit.yaml` каждого клиента:
 
    ```yaml
    config_source:
-     url: https://<your-host>/configs/team-a/socksit.yaml
-     pubkey: <public key from step 1>
+     url: https://<ваш-хост>/configs/team-a/socksit.yaml
+     pubkey: <публичный ключ из шага 1>
      signed: true
-     merge: replace        # or override
-     # proxy: ""           # how to reach the feed; empty = direct (default). The feed
-                           # must NOT go through the SOCKS proxy it configures — leave
-                           # this empty unless the config server is only reachable via a proxy.
+     merge: replace        # или override
+     # proxy: ""           # как достаётся фид; пусто = напрямую (по умолч.). Фид НЕ должен
+                           # идти через тот же SOCKS-прокси, который он настраивает — оставьте
+                           # пустым, если конфиг-сервер доступен только через прокси.
    ```
 
-Clients fetch on start and on their interval, verify the signature against
-`pubkey`, and apply it. Rotating the key re-signs every profile — update every
-client's `pubkey` afterwards.
+Клиенты тянут фид при старте и по своему интервалу, проверяют подпись доверенным
+`pubkey` и применяют его. Ротация ключа пере-подписывает все профили — после неё
+обновите `pubkey` у каждого клиента.
 
-**Leaving managed mode.** Clearing `config_source.url` on a client returns it to
-local control. The client then **drops** the channel-contributed apps and subnets
-(`managed_apps` / `managed_subnets`) and clears the server-forced toggle locks
-(`config_source.locked`) and the trusted key — so the panel's kill-switch / UDP
-toggles unlock and no dead trust anchor lingers. Only the user's own apps and
-subnets remain (in override mode the channel's apps stop being routed; the user's
-own are untouched). This normalization happens when the edit is saved and, as a
-backstop, on the next service start if the file was edited directly.
+**Отвязка от управляемого режима.** Очистка `config_source.url` на клиенте возвращает
+его под локальный контроль. Клиент тогда **выбрасывает** приложения и подсети из канала
+(`managed_apps` / `managed_subnets`) и сбрасывает форсированные локи тумблеров
+(`config_source.locked`) и доверенный ключ — тумблеры kill-switch / UDP разблокируются,
+мёртвый якорь доверия не остаётся. Остаются только собственные приложения и подсети
+пользователя (в override-режиме приложения из канала перестают маршрутизироваться; свои
+не трогаются). Нормализация происходит при сохранении правки и, как подстраховка, при
+следующем старте службы, если файл правили напрямую.
 
-## Migration (server moved / key rotation)
+## Миграция (переезд сервера / ротация ключа)
 
-Each profile has an optional **Migration** block, served as a signed
-`migrate.yaml` sidecar next to the config. It lets you push channel changes to
-clients centrally instead of reconfiguring each one:
+У каждого профиля есть опциональный блок **Миграции**, раздаваемый подписанным
+сайдкаром `migrate.yaml` рядом с конфигом. Он позволяет пушить изменения канала
+клиентам централизованно, а не перенастраивать каждый:
 
-- **New config URL** — when the server moves. Clients apply it automatically; the
-  pinned key still guards them (a wrong/hostile URL can't forge a valid config,
-  worst case is a failed fetch), so no per-client approval is needed.
-- **Apply mode** (replace / override) — dictate whether clients take exactly this
-  config (replace) or keep their own apps/subnets on top (override). Applied
-  automatically.
-- **Update endpoint / channel / mode** — applied automatically too; app binaries
-  are still verified against the app's built-in update key, so a bad endpoint
-  can't push a malicious binary.
-- **Rotate trusted key (new pubkey)** — moves the root of trust, so it is **never**
-  applied silently. Each client surfaces it in the panel for the local admin to
-  Accept or Decline; declined keys aren't re-prompted.
+- **Новый URL конфига** — при переезде сервера. Клиенты применяют автоматически;
+  закреплённый ключ по-прежнему их защищает (неверный/враждебный URL не подделает
+  валидный конфиг, худшее — неудачный fetch), поэтому подтверждение на клиенте не нужно.
+- **Режим применения** (replace / override) — диктует, берут ли клиенты этот конфиг
+  точь-в-точь (replace) или сохраняют свои приложения/подсети поверх (override).
+  Применяется автоматически.
+- **Endpoint / канал / режим обновлений** — тоже применяются автоматически; бинарь
+  приложения всё равно проверяется встроенным ключом обновлений, так что плохой endpoint
+  не пушнёт вредоносный бинарь.
+- **Ротация доверенного ключа (новый pubkey)** — сдвигает корень доверия, поэтому
+  **никогда** не применяется молча. Каждый клиент показывает её в панели для локального
+  админа — Принять или Отклонить; отклонённые ключи повторно не предлагаются.
 
-Simple key rotation: put the *new* public key in the migration while the server
-still signs with the *current* key, let clients Accept it, then switch the
-server's signing key (Generate/Import). Clearing all migration fields removes the
-sidecar. Migration only reaches clients new enough to understand it; the routing
-feed itself stays backward-compatible.
+Простая ротация ключа: положите *новый* публичный ключ в миграцию, пока сервер ещё
+подписывает *текущим*, дайте клиентам Принять, затем смените ключ подписи сервера
+(Сгенерировать/Импортировать). Очистка всех полей миграции убирает сайдкар. Миграция
+доходит только до клиентов, достаточно новых, чтобы её понять; сам фид маршрутизации
+остаётся обратно совместимым.
 
-## Security notes
+## Замечания по безопасности
 
-- The **private signing key** lives on the `/data` volume (`0600`), never in git
-  or the image (SEC-1). Back it up out-of-band; losing it means clients pinned to
-  its public key stop accepting new configs until you distribute a new pubkey.
-- The image is distroless/non-root; the admin surface requires auth (ADM-1) and
-  every admin action is written to an audit log (SEC-3).
-- Put a TLS-terminating reverse proxy in front for anything beyond local dev; set
-  `SECURE_COOKIES=true` there and forward `X-Forwarded-Proto`.
+- **Приватный ключ подписи** живёт на томе `/data` (`0600`), никогда в git или образе
+  (SEC-1). Бэкапьте его отдельно; потеря означает, что клиенты, закреплённые на его
+  публичном ключе, перестанут принимать новые конфиги, пока вы не раздадите новый pubkey.
+- Образ distroless/non-root; админка требует авторизации (ADM-1), каждое действие
+  администратора пишется в аудит-лог (SEC-3).
+- Ставьте перед сервисом TLS-терминирующий обратный прокси для всего, кроме локальной
+  разработки; там задайте `SECURE_COOKIES=true` и пробрасывайте `X-Forwarded-Proto`.
