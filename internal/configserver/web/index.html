@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SocksIt — Config Server</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iIzBlN2M4NiIvPjxjaXJjbGUgY3g9IjkiIGN5PSIyMyIgcj0iMyIgZmlsbD0iI2ZmZiIvPjxwYXRoIGQ9Ik05IDIzIEwyMSAxMSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIuNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTE1IDExIEgyMSBWMTciIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyLjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==">
 <style>
   :root{
     --accent:#0e7c86; --accent-fg:#fff; --accent-weak:#0e7c8618;
@@ -22,7 +23,8 @@
   .app{display:flex;min-height:100vh}
   .side{width:220px;flex:0 0 220px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:16px 12px}
   .brand{display:flex;align-items:center;gap:10px;padding:6px 8px 16px;font-weight:600}
-  .brand .logo{width:28px;height:28px;border-radius:8px;background:var(--accent);flex:0 0 auto}
+  .brand .logo{width:28px;height:28px;flex:0 0 auto;display:block}
+  .authlogo{width:40px;height:40px;display:block;margin:0 auto 10px}
   .nav a{display:block;padding:9px 12px;border-radius:9px;color:var(--muted);cursor:pointer;font-weight:500;text-decoration:none}
   .nav a:hover{background:var(--panel-2);color:var(--text)} .nav a.active{background:var(--accent-weak);color:var(--accent)}
   .side .foot{margin-top:auto;border-top:1px solid var(--border);padding-top:12px}
@@ -48,7 +50,7 @@
   th{color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.05em;font-size:11px}
   .center{min-height:100vh;display:flex;align-items:center;justify-content:center}
   .authbox{width:360px;max-width:92vw;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:22px}
-  .authbox h1{margin-bottom:4px} .authbox .sub{color:var(--muted);margin-bottom:14px}
+  .authbox h1{margin-bottom:4px} .authbox .sub{color:var(--muted);margin-bottom:14px;text-align:center}
   .snippet{background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:10px;white-space:pre;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
   .pill{font-size:11px;font-weight:500;padding:3px 9px;border-radius:999px;background:var(--panel-2);border:1px solid var(--border);color:var(--muted)}
 </style>
@@ -57,7 +59,8 @@
 
 <div id="screen-auth" class="center" style="display:none">
   <div class="authbox">
-    <h1 id="authTitle">Sign in</h1>
+    <svg class="authlogo" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="8" fill="#0e7c86"/><circle cx="9" cy="23" r="3" fill="#fff"/><path d="M9 23 L21 11" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M15 11 H21 V17" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <h1 id="authTitle" style="text-align:center">Sign in</h1>
     <div class="sub" id="authSub">Config server administration</div>
     <label class="fld">Password<input type="password" id="authPw" autocomplete="current-password"></label>
     <div class="banner" id="authBanner"></div>
@@ -67,7 +70,7 @@
 
 <div id="screen-app" class="app" style="display:none">
   <aside class="side">
-    <div class="brand"><div class="logo"></div>SocksIt Config</div>
+    <div class="brand"><svg class="logo" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="8" fill="#0e7c86"/><circle cx="9" cy="23" r="3" fill="#fff"/><path d="M9 23 L21 11" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M15 11 H21 V17" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>SocksIt Config</div>
     <nav class="nav" id="nav">
       <a data-sec="profiles" class="active">Profiles</a>
       <a data-sec="key">Signing key</a>
@@ -87,7 +90,6 @@
             <label class="fld">Proxy address<input type="text" id="fAddr" placeholder="10.0.0.1"></label>
             <label class="fld">Port<input type="number" id="fPort" value="1080"></label>
             <label class="fld">Mode<select id="fMode"><option value="allowlist">allowlist</option><option value="blocklist">blocklist</option></select></label>
-            <label class="fld">Fake-IP v4<input type="text" id="fFake" value="198.18.0.0/15"></label>
           </div>
           <div class="row" style="margin-top:10px;gap:22px">
             <label class="switch"><input type="checkbox" id="fUdp" checked> Proxy UDP</label>
@@ -191,7 +193,7 @@ async function selectProfile(name){
   const v = await api('/api/profiles/'+encodeURIComponent(name));
   $('#pName').textContent = name;
   $('#fAddr').value=v.address||''; $('#fPort').value=v.port||1080; $('#fMode').value=v.mode||'allowlist';
-  $('#fFake').value=v.fakeIPv4||'198.18.0.0/15'; $('#fUdp').checked=!!v.udp; $('#fKill').checked=!!v.killSwitch;
+  $('#fUdp').checked=!!v.udp; $('#fKill').checked=!!v.killSwitch;
   $('#fApps').value=(v.apps||[]).join('\n'); $('#fSubnets').value=(v.subnets||[]).join('\n');
   show($('#editorCard'), true); banner($('#editBanner'),'',''); $('#editBanner').className='banner';
   renderSnippet(); loadProfiles();
@@ -199,7 +201,7 @@ async function selectProfile(name){
 function collect(){
   const lines = s => (s||'').split('\n').map(x=>x.trim()).filter(Boolean);
   return { address:$('#fAddr').value.trim(), port:parseInt($('#fPort').value||'1080',10), mode:$('#fMode').value,
-    fakeIPv4:$('#fFake').value.trim(), udp:$('#fUdp').checked, killSwitch:$('#fKill').checked,
+    udp:$('#fUdp').checked, killSwitch:$('#fKill').checked,
     apps:lines($('#fApps').value), subnets:lines($('#fSubnets').value) };
 }
 $('#btnSaveProfile').onclick = async () => {
@@ -217,7 +219,7 @@ $('#btnNewProfile').onclick = async () => {
   if(!/^[a-z0-9][a-z0-9-]{0,39}$/.test(name)){ alert('Invalid name.'); return; }
   current = name;
   $('#pName').textContent=name; $('#fAddr').value=''; $('#fPort').value=1080; $('#fMode').value='allowlist';
-  $('#fFake').value='198.18.0.0/15'; $('#fUdp').checked=true; $('#fKill').checked=true; $('#fApps').value=''; $('#fSubnets').value='';
+  $('#fUdp').checked=true; $('#fKill').checked=true; $('#fApps').value=''; $('#fSubnets').value='';
   show($('#editorCard'),true); banner($('#editBanner'),'info','New profile — fill in and Save & sign.'); renderSnippet();
 };
 function renderSnippet(){

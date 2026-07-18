@@ -120,26 +120,23 @@ type ProfileView struct {
 	KillSwitch bool     `json:"killSwitch"`
 	Apps       []string `json:"apps"`
 	Subnets    []string `json:"subnets"`
-	FakeIPv4   string   `json:"fakeIPv4"`
 }
 
 // feedConfig is exactly what gets served and signed: the routing subset of the
 // SocksIt config, with yaml tags matching internal/config so clients parse it.
+// dns.fakeip_v4 is deliberately NOT carried — it is a client-side technical
+// default (198.18.0.0/15) that operators never need to push.
 type feedConfig struct {
 	Proxy         feedProxy `yaml:"proxy"`
 	Apps          []string  `yaml:"apps"`
 	DirectSubnets []string  `yaml:"direct_subnets,omitempty"`
 	Mode          string    `yaml:"mode"`
 	KillSwitch    bool      `yaml:"kill_switch"`
-	DNS           feedDNS   `yaml:"dns"`
 }
 type feedProxy struct {
 	Address string `yaml:"address"`
 	Port    int    `yaml:"port"`
 	UDP     bool   `yaml:"udp"`
-}
-type feedDNS struct {
-	FakeIPv4 string `yaml:"fakeip_v4"`
 }
 
 func (s *Store) profileDir(name string) string { return filepath.Join(s.dir, "profiles", name) }
@@ -186,7 +183,6 @@ func (s *Store) GetProfile(name string) (*ProfileView, error) {
 		KillSwitch: c.KillSwitchOn(),
 		Apps:       c.Apps,
 		Subnets:    c.DirectSubnets,
-		FakeIPv4:   c.DNS.FakeIPv4,
 	}, nil
 }
 
@@ -257,9 +253,6 @@ func (v *ProfileView) toConfig() *config.Config {
 	c.Mode = v.Mode
 	c.Apps = cleanList(v.Apps)
 	c.DirectSubnets = cleanList(v.Subnets)
-	if strings.TrimSpace(v.FakeIPv4) != "" {
-		c.DNS.FakeIPv4 = strings.TrimSpace(v.FakeIPv4)
-	}
 	return c
 }
 
@@ -270,7 +263,6 @@ func feedFromConfig(c *config.Config) feedConfig {
 		DirectSubnets: c.DirectSubnets,
 		Mode:          c.Mode,
 		KillSwitch:    c.KillSwitchOn(),
-		DNS:           feedDNS{FakeIPv4: c.DNS.FakeIPv4},
 	}
 }
 

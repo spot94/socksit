@@ -24,7 +24,7 @@ func TestValidName(t *testing.T) {
 
 func sampleProfile(name string) *ProfileView {
 	return &ProfileView{Name: name, Address: "10.0.0.1", Port: 1080, Mode: "allowlist",
-		UDP: true, KillSwitch: true, FakeIPv4: "198.18.0.0/15", Apps: []string{"chrome.exe", "Telegram.exe"}}
+		UDP: true, KillSwitch: true, Apps: []string{"chrome.exe", "Telegram.exe"}}
 }
 
 func TestStoreSignRoundtrip(t *testing.T) {

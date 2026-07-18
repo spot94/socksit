@@ -20,7 +20,7 @@ with its own app set — different groups get different configs. All profiles ar
 signed by the one server key.
 
 The served config carries only **routing** fields (proxy address/port/udp, apps,
-mode, kill-switch, direct subnets, fake-ip). It never carries the SOCKS
+mode, kill-switch, direct subnets). It never carries the SOCKS
 **credentials** (those stay on each client, DPAPI-encrypted) or client-local
 policy like `config_source`/`update`. Feeds are validated with the *exact* client
 schema (`internal/config`) before signing, so a client can never receive an
