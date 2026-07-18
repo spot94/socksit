@@ -4,6 +4,11 @@ name: configserver image
 # (ghcr.io/<owner>/socksit-configserver). Runs on pushes to main (-> :latest) and
 # on version tags (-> :X.Y.Z). The default compose pulls :latest from here.
 #
+# The paths filter means CLIENT-ONLY changes don't rebuild the image — it only
+# runs when a file the server binary actually depends on changes (its packages,
+# the Dockerfile, go.mod/go.sum, or this workflow). internal/config is shared with
+# the client, so a config-schema change does (correctly) rebuild it.
+#
 # GHCR packages start PRIVATE. After the first push, make the package public
 # (repo → Packages → socksit-configserver → Package settings → Change visibility)
 # so `docker compose pull` works without a login, or run `docker login ghcr.io`.
@@ -12,6 +17,14 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+    paths:
+      - 'cmd/configserver/**'
+      - 'internal/configserver/**'
+      - 'internal/config/**'
+      - 'deploy/configserver/Dockerfile'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/configserver-image.yml'
   workflow_dispatch:
 
 permissions:
