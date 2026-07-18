@@ -85,15 +85,10 @@ func (r *Runtime) Run(ctx context.Context) error {
 		defer rot.Close()
 	}
 	if r.ensureFirstRunConfig() {
-		fmt.Fprintf(r.log, "First run: created a default config at %s\n", r.configPath())
+		r.logf("INFO", "first run: created a default config at %s", r.configPath())
 	}
-	fmt.Fprintf(r.log,
-		"SocksIt is starting.\n"+
-			"  Config: %s\n"+
-			"  Logs:   %s\n"+
-			"  Edit settings in the app window — run `socksit gui`, or use the tray icon → \"Open app list…\".\n"+
-			"  (You can also edit the config file directly; changes apply automatically.)\n",
-		r.configPath(), r.DataDir)
+	r.logf("INFO", "starting SocksIt %s (config %s, logs %s)", r.Version, r.configPath(), r.DataDir)
+	r.logf("INFO", "edit settings via `socksit gui`, the tray icon, or the config file (changes apply automatically)")
 
 	var auditW io.Writer = io.Discard
 	if rot, err := logfile.NewRotator(filepath.Join(r.DataDir, "audit.log"), auditLogMaxSize, auditLogBackups); err == nil {
@@ -103,13 +98,13 @@ func (r *Runtime) Run(ctx context.Context) error {
 	auditLog := audit.New(auditW)
 
 	if needs, detail, err := netstate.Reconcile(); err == nil && needs {
-		fmt.Fprintf(r.log, "reconcile: %s\n", detail)
+		r.logf("INFO", "reconcile: %s", detail)
 		auditLog.Log("service", "reconciled stale network state", detail)
 	}
 
 	// Config hot-reload: editing socksit.yaml (or GUI Save) triggers a reload.
 	if err := config.Watch(ctx, r.configPath(), 500*time.Millisecond, r.signalRestart); err != nil {
-		fmt.Fprintf(r.log, "config watch unavailable: %v\n", err)
+		r.logf("WARN", "config watch unavailable: %v", err)
 	}
 	// NOTE: network-change self-heal is handled inside sing-box via
 	// auto_detect_interface. We deliberately do NOT restart the engine on route
@@ -157,9 +152,7 @@ func (r *Runtime) superviseLoop(ctx context.Context) error {
 
 		cfg, err := r.effectiveConfig()
 		if err != nil {
-			fmt.Fprintf(r.log, "waiting for a valid config at %s — %v\n"+
-				"  (edit the file: set proxy.address and add apps; changes apply automatically)\n",
-				r.configPath(), err)
+			r.logf("WARN", "waiting for a valid config at %s — %v (set proxy.address and add apps; changes apply automatically)", r.configPath(), err)
 			if !r.waitRestart(ctx) {
 				return ctx.Err()
 			}
@@ -173,7 +166,7 @@ func (r *Runtime) superviseLoop(ctx context.Context) error {
 			err = singbox.Check(r.EnginePath, r.genPath())
 		}
 		if err != nil {
-			fmt.Fprintf(r.log, "generate/check failed (keeping previous, holding): %v\n", err)
+			r.logf("ERROR", "generate/check failed (keeping previous, holding): %v", err)
 			if !r.waitRestart(ctx) {
 				return ctx.Err()
 			}
@@ -282,6 +275,17 @@ func (r *Runtime) ensureFirstRunConfig() bool {
 // (OI)(CI) so new files inherit the grant, M = Modify.
 func ensureUserWritable(dir string) {
 	_ = exec.Command("icacls", dir, "/grant", "*S-1-5-32-545:(OI)(CI)M", "/C", "/Q").Run()
+}
+
+// logf writes one timestamped, levelled line to the runtime log so SocksIt's own
+// messages share a single parseable shape — "2006-01-02 15:04:05 LEVEL message"
+// — alongside the engine's own formatted output. level is a short tag such as
+// INFO, WARN or ERROR. Each call is a single Write, so lines never interleave.
+func (r *Runtime) logf(level, format string, args ...any) {
+	if r.log == nil {
+		return
+	}
+	fmt.Fprintf(r.log, "%s %-5s %s\n", time.Now().Format("2006-01-02 15:04:05"), level, fmt.Sprintf(format, args...))
 }
 
 // safeMulti writes to every writer, ignoring individual errors so one dead sink

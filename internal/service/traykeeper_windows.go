@@ -30,7 +30,7 @@ const TrayMutexName = `Global\SocksItTray`
 func (r *Runtime) superviseTray(ctx context.Context) {
 	exe, err := os.Executable()
 	if err != nil {
-		fmt.Fprintf(r.log, "tray keeper disabled: %v\n", err)
+		r.logf("WARN", "tray keeper disabled: %v", err)
 		return
 	}
 	var lastErr string
@@ -50,11 +50,11 @@ func (r *Runtime) superviseTray(ctx context.Context) {
 				// change once, not every tick.
 				if s := err.Error(); s != lastErr {
 					lastErr = s
-					fmt.Fprintf(r.log, "tray keeper: %v (will retry)\n", err)
+					r.logf("WARN", "tray keeper: %v (will retry)", err)
 				}
 			} else {
 				lastErr = ""
-				fmt.Fprintf(r.log, "tray keeper: launched tray in the console session\n")
+				r.logf("INFO", "tray keeper: launched tray in the console session")
 			}
 		}
 		timer.Reset(7 * time.Second)

@@ -62,7 +62,7 @@ func (r *Runtime) superviseConfigSource(ctx context.Context) {
 		cfg := r.lenientConfig()
 		if cfg.ConfigManaged() {
 			if _, err := r.fetchConfig(ctx); err != nil {
-				fmt.Fprintf(r.log, "config fetch failed: %v\n", err)
+				r.logf("WARN", "config fetch failed: %v", err)
 			}
 			next = cfg.ConfigEvery()
 		}
@@ -166,7 +166,7 @@ func (r *Runtime) fetchConfig(ctx context.Context) (configFetchResult, error) {
 			return res, err
 		}
 		res.Changed = true
-		fmt.Fprintf(r.log, "config: applied managed config from %s\n", cfg.ConfigSource.URL)
+		r.logf("INFO", "config: applied managed config from %s", cfg.ConfigSource.URL)
 		r.signalRestart() // in addition to the file watcher
 	}
 	res.Fetched = time.Now().UTC().Format(time.RFC3339)
@@ -300,11 +300,11 @@ func (r *Runtime) fetchMigrate(ctx context.Context, client *http.Client, cfg *co
 	}
 	sig, err := httpGetBytes(ctx, client, migURL+".sig", 8<<10)
 	if err != nil {
-		fmt.Fprintf(r.log, "config: migrate sidecar has no signature — ignoring: %v\n", err)
+		r.logf("WARN", "config: migrate sidecar has no signature — ignoring: %v", err)
 		return migrateInstr{}, false
 	}
 	if err := updates.VerifyWithKeyB64(body, string(sig), cfg.ConfigSource.PubKey); err != nil {
-		fmt.Fprintf(r.log, "config: migrate sidecar signature invalid — ignoring: %v\n", err)
+		r.logf("WARN", "config: migrate sidecar signature invalid — ignoring: %v", err)
 		return migrateInstr{}, false
 	}
 	var m migrateInstr

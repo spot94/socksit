@@ -71,9 +71,9 @@ func (r *Runtime) superviseUpdates(ctx context.Context) {
 		cfg := r.lenientConfig()
 		if cfg.UpdatesEnabled() {
 			if _, err := r.runUpdateCheck(ctx); err != nil {
-				fmt.Fprintf(r.log, "update check failed: %v\n", err)
+				r.logf("WARN", "update check failed: %v", err)
 			} else if res := r.lastUpdate.Load(); res != nil && res.HasUpdate {
-				fmt.Fprintf(r.log, "update available: %s (current %s)\n", res.Available, res.Current)
+				r.logf("INFO", "update available: %s (current %s)", res.Available, res.Current)
 			}
 			next = cfg.CheckEvery()
 		}

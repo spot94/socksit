@@ -62,7 +62,7 @@ func (r *Runtime) applyUpdate() (applyResult, error) {
 		return applyResult{}, errors.New("the manifest has no app artifact to download")
 	}
 
-	fmt.Fprintf(r.log, "update: downloading %s from %s\n", m.Version, m.App.URL)
+	r.logf("INFO", "update: downloading %s from %s", m.Version, m.App.URL)
 	appBytes, err := updates.DownloadVerified(ctx, client, m.App.URL, m.App.SHA256)
 	if err != nil {
 		return applyResult{}, err
@@ -83,7 +83,7 @@ func (r *Runtime) applyUpdate() (applyResult, error) {
 		_ = os.Rename(oldPath, target) // undo
 		return applyResult{}, fmt.Errorf("write the new exe: %w", err)
 	}
-	fmt.Fprintf(r.log, "update: installed %s, launching restart helper\n", m.Version)
+	r.logf("INFO", "update: installed %s, launching restart helper", m.Version)
 
 	// Spawn the KNOWN-GOOD old binary as a detached helper to stop→start the
 	// service and roll back if the new build fails to come up.
