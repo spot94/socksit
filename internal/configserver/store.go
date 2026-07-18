@@ -159,11 +159,15 @@ type feedMigrate struct {
 // dns.fakeip_v4 is deliberately NOT carried — it is a client-side technical
 // default (198.18.0.0/15) that operators never need to push.
 type feedConfig struct {
-	Proxy         feedProxy `yaml:"proxy"`
-	Apps          []string  `yaml:"apps"`
-	DirectSubnets []string  `yaml:"direct_subnets,omitempty"`
-	Mode          string    `yaml:"mode"`
-	KillSwitch    bool      `yaml:"kill_switch"`
+	Proxy feedProxy `yaml:"proxy"`
+	Apps  []string  `yaml:"apps"`
+	// direct_subnets is emitted even when empty (no omitempty): a client in
+	// override mode distinguishes "present but empty" (clear the channel's subnets)
+	// from "absent" (keep them). Same as apps, so clearing the field on the server
+	// actually clears the managed subnets on clients.
+	DirectSubnets []string `yaml:"direct_subnets"`
+	Mode          string   `yaml:"mode"`
+	KillSwitch    bool     `yaml:"kill_switch"`
 }
 type feedProxy struct {
 	Address string `yaml:"address"`
