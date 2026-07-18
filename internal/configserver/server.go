@@ -25,6 +25,8 @@ func New(store *Store, auth *Auth, audit *Audit) *Server {
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	s.mux.HandleFunc("GET /configs/{name}/socksit.yaml", s.serveConfig)
 	s.mux.HandleFunc("GET /configs/{name}/socksit.yaml.sig", s.serveSig)
+	s.mux.HandleFunc("GET /configs/{name}/migrate.yaml", s.serveMigrate)
+	s.mux.HandleFunc("GET /configs/{name}/migrate.yaml.sig", s.serveMigrateSig)
 	// Admin UI + auth flow.
 	s.mux.HandleFunc("GET /{$}", s.serveUI)
 	s.mux.HandleFunc("GET /api/session", s.handleSession)
@@ -73,6 +75,26 @@ func (s *Server) serveConfig(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) serveSig(w http.ResponseWriter, r *http.Request) {
 	_, sig, err := s.store.ServedBytes(r.PathValue("name"))
+	if err != nil || len(sig) == 0 {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Write(sig)
+}
+
+func (s *Server) serveMigrate(w http.ResponseWriter, r *http.Request) {
+	body, _, err := s.store.ServedMigrate(r.PathValue("name"))
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+	w.Write(body)
+}
+
+func (s *Server) serveMigrateSig(w http.ResponseWriter, r *http.Request) {
+	_, sig, err := s.store.ServedMigrate(r.PathValue("name"))
 	if err != nil || len(sig) == 0 {
 		http.Error(w, "not found", http.StatusNotFound)
 		return

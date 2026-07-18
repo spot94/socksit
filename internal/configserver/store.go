@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -120,6 +121,35 @@ type ProfileView struct {
 	KillSwitch bool     `json:"killSwitch"`
 	Apps       []string `json:"apps"`
 	Subnets    []string `json:"subnets"`
+	// Migrate optionally proposes channel changes to clients (server moved, key
+	// rotation) via the signed migrate.yaml sidecar. nil/empty = no migration.
+	Migrate *MigrateView `json:"migrate,omitempty"`
+}
+
+// MigrateView is the operator-authored channel migration for a profile. Clients
+// apply configUrl and the update.* fields automatically (still guarded by the
+// pinned key / the baked update key); pubkey (trust-root rotation) is applied
+// only after explicit local admin approval.
+type MigrateView struct {
+	ConfigURL      string `json:"configUrl"`
+	PubKey         string `json:"pubkey"`
+	UpdateEndpoint string `json:"updateEndpoint"`
+	UpdateChannel  string `json:"updateChannel"`
+	UpdateMode     string `json:"updateMode"`
+}
+
+func (m *MigrateView) empty() bool {
+	return m == nil || (strings.TrimSpace(m.ConfigURL) == "" && strings.TrimSpace(m.PubKey) == "" &&
+		strings.TrimSpace(m.UpdateEndpoint) == "" && strings.TrimSpace(m.UpdateChannel) == "" && strings.TrimSpace(m.UpdateMode) == "")
+}
+
+// feedMigrate is the signed migrate.yaml served to clients.
+type feedMigrate struct {
+	ConfigURL      string `yaml:"config_url,omitempty"`
+	PubKey         string `yaml:"pubkey,omitempty"`
+	UpdateEndpoint string `yaml:"update_endpoint,omitempty"`
+	UpdateChannel  string `yaml:"update_channel,omitempty"`
+	UpdateMode     string `yaml:"update_mode,omitempty"`
 }
 
 // feedConfig is exactly what gets served and signed: the routing subset of the
@@ -140,6 +170,12 @@ type feedProxy struct {
 }
 
 func (s *Store) profileDir(name string) string { return filepath.Join(s.dir, "profiles", name) }
+func (s *Store) migrateYamlPath(name string) string {
+	return filepath.Join(s.profileDir(name), "migrate.yaml")
+}
+func (s *Store) migrateSigPath(name string) string {
+	return filepath.Join(s.profileDir(name), "migrate.yaml.sig")
+}
 func (s *Store) yamlPath(name string) string {
 	return filepath.Join(s.profileDir(name), "socksit.yaml")
 }
@@ -174,7 +210,7 @@ func (s *Store) GetProfile(name string) (*ProfileView, error) {
 		return nil, fmt.Errorf("profile %q not found", name)
 	}
 	c := config.ParseLenient(b)
-	return &ProfileView{
+	pv := &ProfileView{
 		Name:       name,
 		Address:    c.Proxy.Address,
 		Port:       c.Proxy.Port,
@@ -183,7 +219,15 @@ func (s *Store) GetProfile(name string) (*ProfileView, error) {
 		KillSwitch: c.KillSwitchOn(),
 		Apps:       c.Apps,
 		Subnets:    c.DirectSubnets,
-	}, nil
+	}
+	if mb, err := os.ReadFile(s.migrateYamlPath(name)); err == nil {
+		var fm feedMigrate
+		if yaml.Unmarshal(mb, &fm) == nil {
+			pv.Migrate = &MigrateView{ConfigURL: fm.ConfigURL, PubKey: fm.PubKey,
+				UpdateEndpoint: fm.UpdateEndpoint, UpdateChannel: fm.UpdateChannel, UpdateMode: fm.UpdateMode}
+		}
+	}
+	return pv, nil
 }
 
 // SaveProfile validates the view (using the real client schema), writes the
@@ -211,7 +255,54 @@ func (s *Store) SaveProfile(v *ProfileView) error {
 	if err := os.WriteFile(s.yamlPath(v.Name), body, 0o600); err != nil {
 		return err
 	}
-	return os.WriteFile(s.sigPath(v.Name), s.signLocked(body), 0o600)
+	if err := os.WriteFile(s.sigPath(v.Name), s.signLocked(body), 0o600); err != nil {
+		return err
+	}
+	// Migration sidecar: write + sign when set, remove when cleared.
+	if v.Migrate.empty() {
+		_ = os.Remove(s.migrateYamlPath(v.Name))
+		_ = os.Remove(s.migrateSigPath(v.Name))
+		return nil
+	}
+	if err := validateMigrate(v.Migrate); err != nil {
+		return err
+	}
+	mb, err := yaml.Marshal(feedMigrate{
+		ConfigURL:      strings.TrimSpace(v.Migrate.ConfigURL),
+		PubKey:         strings.TrimSpace(v.Migrate.PubKey),
+		UpdateEndpoint: strings.TrimSpace(v.Migrate.UpdateEndpoint),
+		UpdateChannel:  strings.TrimSpace(v.Migrate.UpdateChannel),
+		UpdateMode:     strings.TrimSpace(v.Migrate.UpdateMode),
+	})
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(s.migrateYamlPath(v.Name), mb, 0o600); err != nil {
+		return err
+	}
+	return os.WriteFile(s.migrateSigPath(v.Name), s.signLocked(mb), 0o600)
+}
+
+// validateMigrate checks operator-authored migration fields.
+func validateMigrate(m *MigrateView) error {
+	for field, u := range map[string]string{"configUrl": m.ConfigURL, "updateEndpoint": m.UpdateEndpoint} {
+		if u = strings.TrimSpace(u); u != "" {
+			if pu, err := url.Parse(u); err != nil || pu.Host == "" || (pu.Scheme != "http" && pu.Scheme != "https") {
+				return fmt.Errorf("migrate.%s must be an http(s) URL", field)
+			}
+		}
+	}
+	if pk := strings.TrimSpace(m.PubKey); pk != "" {
+		if raw, err := base64.StdEncoding.DecodeString(pk); err != nil || len(raw) != 32 {
+			return errors.New("migrate.pubkey must be a base64 32-byte Ed25519 public key")
+		}
+	}
+	switch strings.TrimSpace(m.UpdateMode) {
+	case "", "off", "notify", "auto":
+	default:
+		return errors.New("migrate.updateMode must be off, notify or auto")
+	}
+	return nil
 }
 
 // DeleteProfile removes a profile and its files.
@@ -286,8 +377,29 @@ func (s *Store) resignAllLocked() error {
 		if err := os.WriteFile(s.sigPath(e.Name()), s.signLocked(body), 0o600); err != nil {
 			return err
 		}
+		if mb, err := os.ReadFile(s.migrateYamlPath(e.Name())); err == nil {
+			if err := os.WriteFile(s.migrateSigPath(e.Name()), s.signLocked(mb), 0o600); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
+}
+
+// ServedMigrate returns the stored migrate.yaml and signature for the public
+// endpoint, or an error if the profile has no migration set.
+func (s *Store) ServedMigrate(name string) (yamlBytes, sig []byte, err error) {
+	if !validName(name) {
+		return nil, nil, errors.New("invalid profile name")
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	yamlBytes, err = os.ReadFile(s.migrateYamlPath(name))
+	if err != nil {
+		return nil, nil, err
+	}
+	sig, _ = os.ReadFile(s.migrateSigPath(name))
+	return yamlBytes, sig, nil
 }
 
 func cleanList(in []string) []string {

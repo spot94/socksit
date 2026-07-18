@@ -101,3 +101,44 @@ func TestImportKeyMatchesMksign(t *testing.T) {
 		t.Fatal("garbage key should be rejected")
 	}
 }
+
+func TestMigrateSidecarRoundtrip(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub, err := s.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := sampleProfile("team-a")
+	p.Migrate = &MigrateView{ConfigURL: "https://new/configs/team-a/socksit.yaml", UpdateMode: "notify", PubKey: pub}
+	if err := s.SaveProfile(p); err != nil {
+		t.Fatalf("save with migrate: %v", err)
+	}
+	body, sig, err := s.ServedMigrate("team-a")
+	if err != nil {
+		t.Fatalf("served migrate: %v", err)
+	}
+	if err := updates.VerifyWithKeyB64(body, string(sig), pub); err != nil {
+		t.Fatalf("migrate signature verify failed: %v", err)
+	}
+	got, _ := s.GetProfile("team-a")
+	if got.Migrate == nil || got.Migrate.ConfigURL != "https://new/configs/team-a/socksit.yaml" || got.Migrate.UpdateMode != "notify" {
+		t.Fatalf("migrate not read back: %+v", got.Migrate)
+	}
+	// Clearing the migration removes the sidecar.
+	got.Migrate = nil
+	if err := s.SaveProfile(got); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.ServedMigrate("team-a"); err == nil {
+		t.Fatal("migrate sidecar should be gone after clearing")
+	}
+	// Invalid migration is rejected.
+	bad := sampleProfile("team-b")
+	bad.Migrate = &MigrateView{ConfigURL: "not-a-url"}
+	if err := s.SaveProfile(bad); err == nil {
+		t.Fatal("invalid migrate.configUrl should be rejected")
+	}
+}

@@ -223,6 +223,12 @@
 
       <div class="card" style="margin-top:10px">
         <h3 data-i18n="cfg.title">Config source (optional)</h3>
+        <div id="keyRotBanner" style="display:none;border:1px solid var(--warn);background:#c47d0018;border-radius:9px;padding:10px 13px;margin:8px 0">
+          <div style="font-weight:600;color:var(--warn)" data-i18n="cfg.rotate.title">Key rotation requested</div>
+          <div class="sub" style="margin-top:2px" data-i18n="cfg.rotate.msg">The config server asks to change the trusted key. Accepting moves the root of trust — only accept if you initiated this rotation.</div>
+          <div class="mono" id="keyRotKey" style="margin:8px 0;word-break:break-all;font-size:12px"></div>
+          <div class="row"><button class="primary" id="btnAcceptKey" data-i18n="cfg.rotate.accept">Accept new key</button><button id="btnDeclineKey" data-i18n="cfg.rotate.decline">Decline</button></div>
+        </div>
         <div class="form" style="margin-top:8px">
           <label class="fld wide"><span data-i18n="cfg.url">Config URL</span><input type="text" id="cfgUrl" data-i18n-ph="cfg.urlPh"></label>
           <label class="fld"><span data-i18n="cfg.interval">Refresh interval</span><input type="text" id="cfgInterval" placeholder="1h"></label>
@@ -356,7 +362,7 @@ const I18N = {
     'upd.channel':'Channel','upd.mode':'Mode','upd.mode.off':'Off','upd.mode.notify':'Notify','upd.mode.auto':'Auto',
     'upd.interval':'Check interval','upd.proxy':'Proxy for checks','upd.proxyPh':'empty=direct · system · use-socks · socks5://host:port',
     'upd.save':'Save','upd.check':'Check now','upd.apply':'Apply update','upd.applying':'Downloading and applying…','upd.restarting':'Update installed — restarting the panel…','upd.upToDate':'Up to date (v{v})','upd.available':'Update available: v{v}','upd.checking':'Checking…','upd.hint':'Trust is verified by signature — the source/CDN is untrusted.',
-    'cfg.title':'Config source (optional)','cfg.url':'Config URL','cfg.urlPh':'https://…/socksit.yaml — empty = local config','cfg.interval':'Refresh interval','cfg.merge':'On update','cfg.merge.replace':'Replace config','cfg.merge.override':'Override fields','cfg.proxy':'Feed proxy','cfg.proxyPh':'empty = direct · system · use-socks · socks5://host:port','cfg.mergeHint':'Replace: the whole local config is swapped for the remote one. Override: only the fields the remote specifies change; your other settings are kept, and the proxied apps are the remote list plus your own.','cfg.managedApps':'Also proxied, from the managed config:','cfg.managedTag':'managed','cfg.signed':'Require signature','cfg.pubkey':'Trusted key (base64)','cfg.pubkeyPh':'Ed25519 public key from `mksign genkey`','cfg.fetch':'Fetch now','cfg.fetching':'Fetching…','cfg.local':'Using the local config.','cfg.fetched':'Last fetched {t}','cfg.changed':' (updated)','cfg.hint':'When set, the config is pulled from this URL and applied automatically (on start and on the interval); local edits are overwritten on refresh. A signed feed (recommended) needs a matching <url>.sig verified with YOUR Trusted key — generate a keypair with `mksign genkey`, put the public half here, sign configs with the private half.'
+    'cfg.title':'Config source (optional)','cfg.url':'Config URL','cfg.urlPh':'https://…/socksit.yaml — empty = local config','cfg.interval':'Refresh interval','cfg.merge':'On update','cfg.merge.replace':'Replace config','cfg.merge.override':'Override fields','cfg.proxy':'Feed proxy','cfg.proxyPh':'empty = direct · system · use-socks · socks5://host:port','cfg.mergeHint':'Replace: the whole local config is swapped for the remote one. Override: only the fields the remote specifies change; your other settings are kept, and the proxied apps are the remote list plus your own.','cfg.managedApps':'Also proxied, from the managed config:','cfg.managedTag':'managed','cfg.rotate.title':'Key rotation requested','cfg.rotate.msg':'The config server asks to change the trusted key. Accepting moves the root of trust — only accept if you initiated this rotation.','cfg.rotate.accept':'Accept new key','cfg.rotate.decline':'Decline','cfg.rotate.confirm':'Change the trusted key to the proposed one? Only accept if you initiated this.','cfg.signed':'Require signature','cfg.pubkey':'Trusted key (base64)','cfg.pubkeyPh':'Ed25519 public key from `mksign genkey`','cfg.fetch':'Fetch now','cfg.fetching':'Fetching…','cfg.local':'Using the local config.','cfg.fetched':'Last fetched {t}','cfg.changed':' (updated)','cfg.hint':'When set, the config is pulled from this URL and applied automatically (on start and on the interval); local edits are overwritten on refresh. A signed feed (recommended) needs a matching <url>.sig verified with YOUR Trusted key — generate a keypair with `mksign genkey`, put the public half here, sign configs with the private half.'
   },
   ru: {
     'nav.dashboard':'Обзор','nav.settings':'Настройки','nav.statistics':'Статистика','nav.logs':'Логи','nav.diagnostics':'Диагностика','nav.about':'О программе',
@@ -389,7 +395,7 @@ const I18N = {
     'upd.channel':'Канал','upd.mode':'Режим','upd.mode.off':'Выкл','upd.mode.notify':'Уведомлять','upd.mode.auto':'Авто',
     'upd.interval':'Интервал проверки','upd.proxy':'Прокси для проверок','upd.proxyPh':'пусто=напрямую · system · use-socks · socks5://host:port',
     'upd.save':'Сохранить','upd.check':'Проверить сейчас','upd.apply':'Установить обновление','upd.applying':'Скачивание и установка…','upd.restarting':'Обновление установлено — перезапуск панели…','upd.upToDate':'Актуальная версия (v{v})','upd.available':'Доступно обновление: v{v}','upd.checking':'Проверка…','upd.hint':'Подлинность проверяется подписью — источник/CDN недоверенный.',
-    'cfg.title':'Источник конфига (опц.)','cfg.url':'URL конфига','cfg.urlPh':'https://…/socksit.yaml — пусто = локальный конфиг','cfg.interval':'Интервал обновления','cfg.merge':'При обновлении','cfg.merge.replace':'Заменять конфиг','cfg.merge.override':'Переопределять поля','cfg.proxy':'Proxy для конфига','cfg.proxyPh':'пусто = напрямую · system · use-socks · socks5://host:port','cfg.mergeHint':'Заменять: локальный конфиг целиком меняется на удалённый. Переопределять: меняются только поля, заданные в удалённом; остальные настройки сохраняются, а список приложений = удалённый плюс твои личные.','cfg.managedApps':'Также проксируются, из управляемого конфига:','cfg.managedTag':'из канала','cfg.signed':'Требовать подпись','cfg.pubkey':'Доверенный ключ (base64)','cfg.pubkeyPh':'публичный Ed25519 из `mksign genkey`','cfg.fetch':'Обновить сейчас','cfg.fetching':'Обновление…','cfg.local':'Используется локальный конфиг.','cfg.fetched':'Обновлено {t}','cfg.changed':' (изменён)','cfg.hint':'Если задан — конфиг тянется по этому URL и применяется автоматически (при старте и по интервалу); локальные правки перезаписываются. Для подписанного канала (рекомендуется) нужен <url>.sig, проверяемый ТВОИМ доверенным ключом — сгенерируй пару `mksign genkey`, публичную половину впиши сюда, конфиги подписывай приватной.'
+    'cfg.title':'Источник конфига (опц.)','cfg.url':'URL конфига','cfg.urlPh':'https://…/socksit.yaml — пусто = локальный конфиг','cfg.interval':'Интервал обновления','cfg.merge':'При обновлении','cfg.merge.replace':'Заменять конфиг','cfg.merge.override':'Переопределять поля','cfg.proxy':'Proxy для конфига','cfg.proxyPh':'пусто = напрямую · system · use-socks · socks5://host:port','cfg.mergeHint':'Заменять: локальный конфиг целиком меняется на удалённый. Переопределять: меняются только поля, заданные в удалённом; остальные настройки сохраняются, а список приложений = удалённый плюс твои личные.','cfg.managedApps':'Также проксируются, из управляемого конфига:','cfg.managedTag':'из канала','cfg.rotate.title':'Запрос на смену ключа','cfg.rotate.msg':'Сервер конфигурации просит сменить доверенный ключ. Принятие меняет корень доверия — принимай только если ты сам инициировал ротацию.','cfg.rotate.accept':'Принять новый ключ','cfg.rotate.decline':'Отклонить','cfg.rotate.confirm':'Сменить доверенный ключ на предложенный? Принимай только если ты это инициировал.','cfg.signed':'Требовать подпись','cfg.pubkey':'Доверенный ключ (base64)','cfg.pubkeyPh':'публичный Ed25519 из `mksign genkey`','cfg.fetch':'Обновить сейчас','cfg.fetching':'Обновление…','cfg.local':'Используется локальный конфиг.','cfg.fetched':'Обновлено {t}','cfg.changed':' (изменён)','cfg.hint':'Если задан — конфиг тянется по этому URL и применяется автоматически (при старте и по интервалу); локальные правки перезаписываются. Для подписанного канала (рекомендуется) нужен <url>.sig, проверяемый ТВОИМ доверенным ключом — сгенерируй пару `mksign genkey`, публичную половину впиши сюда, конфиги подписывай приватной.'
   }
 };
 let lang = 'en';
@@ -549,6 +555,9 @@ async function loadSettings(){
   g('cfgProxy').value = c.cfgProxy||'';
   g('cfgSigned').checked = (c.cfgSigned !== false);
   g('cfgPubKey').value = c.cfgPubKey||'';
+  const pend = c.cfgPendingPubKey||'';
+  g('keyRotKey').textContent = pend;
+  g('keyRotBanner').style.display = pend ? '' : 'none';
   renderApps();
   loadProcs();
   loadCfgStatus();
@@ -568,6 +577,8 @@ document.getElementById('btnCfgFetch').onclick = async ()=>{
   await loadSettings(); // reflect the applied config (managed apps, overridden fields) + status
   refreshState();
 };
+g('btnAcceptKey').onclick = async ()=>{ if(!confirm(t('cfg.rotate.confirm'))) return; const r=await call('appAcceptKeyRotation'); if(r&&!r.ok&&r.message) alert(r.message); await loadSettings(); };
+g('btnDeclineKey').onclick = async ()=>{ const r=await call('appDeclineKeyRotation'); if(r&&!r.ok&&r.message) alert(r.message); await loadSettings(); };
 async function loadProcs(){
   const names = await call('appProcesses'); const dl = document.getElementById('procList');
   dl.innerHTML = names.map(n=>'<option value="'+escapeHtml(n)+'">').join('');

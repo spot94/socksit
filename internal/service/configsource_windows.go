@@ -132,6 +132,22 @@ func (r *Runtime) fetchConfig(ctx context.Context) (configFetchResult, error) {
 		return res, err
 	}
 
+	// Preserve client-local channel policy the routing feed doesn't carry (so
+	// replace mode doesn't reset update.* to defaults), then apply any signed
+	// migration (server moved / update channel / key rotation).
+	newCfg.Update = cfg.Update
+	newCfg.ConfigSource = cfg.ConfigSource
+	if cfg.ConfigSigned() && strings.TrimSpace(cfg.ConfigSource.PubKey) != "" {
+		if mig, ok := r.fetchMigrate(cctx, client, cfg); ok {
+			applyMigrate(newCfg, mig, cfg)
+		}
+	}
+	if err := newCfg.Validate(); err != nil {
+		res.Error = "migration produced an invalid config: " + err.Error()
+		r.lastConfig.Store(&res)
+		return res, err
+	}
+
 	newBytes, err := yaml.Marshal(newCfg)
 	if err != nil {
 		res.Error = err.Error()
@@ -218,6 +234,73 @@ func deepMerge(base, patch map[string]any) map[string]any {
 		out[k] = pv
 	}
 	return out
+}
+
+// migrateInstr is the signed migrate.yaml sidecar: channel changes proposed by
+// the managed server.
+type migrateInstr struct {
+	ConfigURL      string `yaml:"config_url"`
+	PubKey         string `yaml:"pubkey"`
+	UpdateEndpoint string `yaml:"update_endpoint"`
+	UpdateChannel  string `yaml:"update_channel"`
+	UpdateMode     string `yaml:"update_mode"`
+}
+
+// migrateURLFrom derives the migrate.yaml URL from the config feed URL (same
+// directory, filename migrate.yaml).
+func migrateURLFrom(u string) string {
+	if i := strings.LastIndex(u, "/"); i >= 0 {
+		return u[:i+1] + "migrate.yaml"
+	}
+	return u + "/migrate.yaml"
+}
+
+// fetchMigrate best-effort loads and verifies the migrate sidecar. A missing
+// sidecar (404) means "no migration". A present-but-unverifiable sidecar is
+// ignored (never applied) rather than failing the whole config fetch.
+func (r *Runtime) fetchMigrate(ctx context.Context, client *http.Client, cfg *config.Config) (migrateInstr, bool) {
+	migURL := migrateURLFrom(cfg.ConfigSource.URL)
+	body, err := httpGetBytes(ctx, client, migURL, 64<<10)
+	if err != nil {
+		return migrateInstr{}, false // absent or unreachable
+	}
+	sig, err := httpGetBytes(ctx, client, migURL+".sig", 8<<10)
+	if err != nil {
+		fmt.Fprintf(r.log, "config: migrate sidecar has no signature — ignoring: %v\n", err)
+		return migrateInstr{}, false
+	}
+	if err := updates.VerifyWithKeyB64(body, string(sig), cfg.ConfigSource.PubKey); err != nil {
+		fmt.Fprintf(r.log, "config: migrate sidecar signature invalid — ignoring: %v\n", err)
+		return migrateInstr{}, false
+	}
+	var m migrateInstr
+	if err := yaml.Unmarshal(body, &m); err != nil {
+		return migrateInstr{}, false
+	}
+	return m, true
+}
+
+// applyMigrate applies a verified migration to c: config_source.url and update.*
+// change automatically (still guarded by the pinned key / the baked update key);
+// a pubkey rotation is NOT applied — it is stashed as pending for admin approval,
+// unless the admin already declined that exact key.
+func applyMigrate(c *config.Config, m migrateInstr, local *config.Config) {
+	if u := strings.TrimSpace(m.ConfigURL); u != "" {
+		c.ConfigSource.URL = u
+	}
+	if e := strings.TrimSpace(m.UpdateEndpoint); e != "" {
+		c.Update.Endpoint = e
+	}
+	if ch := strings.TrimSpace(m.UpdateChannel); ch != "" {
+		c.Update.Channel = ch
+	}
+	if md := strings.TrimSpace(m.UpdateMode); md != "" {
+		c.Update.Mode = md
+	}
+	if pk := strings.TrimSpace(m.PubKey); pk != "" &&
+		pk != local.ConfigSource.PubKey && pk != local.ConfigSource.DeclinedPubKey {
+		c.ConfigSource.PendingPubKey = pk
+	}
 }
 
 func httpGetBytes(ctx context.Context, client *http.Client, url string, limit int64) ([]byte, error) {

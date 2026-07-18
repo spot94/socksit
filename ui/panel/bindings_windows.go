@@ -60,21 +60,22 @@ type stateView struct {
 }
 
 type configView struct {
-	Address       string   `json:"address"`
-	Port          int      `json:"port"`
-	Mode          string   `json:"mode"`
-	KillSwitch    bool     `json:"killSwitch"`
-	ShowTray      bool     `json:"showTray"`
-	UDP           bool     `json:"udp"`
-	DirectSubnets []string `json:"directSubnets"`
-	Apps          []string `json:"apps"`
-	CfgURL        string   `json:"cfgUrl"`
-	CfgInterval   string   `json:"cfgInterval"`
-	CfgSigned     bool     `json:"cfgSigned"`
-	CfgPubKey     string   `json:"cfgPubKey"`
-	CfgMerge      string   `json:"cfgMerge"`
-	CfgProxy      string   `json:"cfgProxy"`
-	ManagedApps   []string `json:"managedApps"`
+	Address          string   `json:"address"`
+	Port             int      `json:"port"`
+	Mode             string   `json:"mode"`
+	KillSwitch       bool     `json:"killSwitch"`
+	ShowTray         bool     `json:"showTray"`
+	UDP              bool     `json:"udp"`
+	DirectSubnets    []string `json:"directSubnets"`
+	Apps             []string `json:"apps"`
+	CfgURL           string   `json:"cfgUrl"`
+	CfgInterval      string   `json:"cfgInterval"`
+	CfgSigned        bool     `json:"cfgSigned"`
+	CfgPubKey        string   `json:"cfgPubKey"`
+	CfgMerge         string   `json:"cfgMerge"`
+	CfgProxy         string   `json:"cfgProxy"`
+	CfgPendingPubKey string   `json:"cfgPendingPubKey"`
+	ManagedApps      []string `json:"managedApps"`
 }
 
 type saveInput struct {
@@ -143,6 +144,8 @@ func (a *app) bind() {
 	_ = a.w.Bind("appSetDark", func(dark bool) { applyDarkTitleBar(uintptr(a.w.Window()), dark) })
 	_ = a.w.Bind("appElevate", a.elevate)
 	_ = a.w.Bind("appRestartForUpdate", a.restartForUpdate)
+	_ = a.w.Bind("appAcceptKeyRotation", a.acceptKeyRotation)
+	_ = a.w.Bind("appDeclineKeyRotation", a.declineKeyRotation)
 	_ = a.w.Bind("appGetUpdate", a.getUpdate)
 	_ = a.w.Bind("appSaveUpdate", a.saveUpdate)
 	_ = a.w.Bind("appUpdateStatus", a.updateStatus)
@@ -321,21 +324,22 @@ func (a *app) state() stateView {
 func (a *app) getConfig() configView {
 	c := a.loadConfig()
 	return configView{
-		Address:       c.Proxy.Address,
-		Port:          c.Proxy.Port,
-		Mode:          c.Mode,
-		KillSwitch:    c.KillSwitchOn(),
-		ShowTray:      c.ShowTrayEnabled(),
-		UDP:           c.UDPEnabled(),
-		DirectSubnets: nonNil(c.DirectSubnets),
-		Apps:          nonNil(c.Apps),
-		CfgURL:        c.ConfigSource.URL,
-		CfgInterval:   c.ConfigSource.Interval,
-		CfgSigned:     c.ConfigSigned(),
-		CfgPubKey:     c.ConfigSource.PubKey,
-		CfgMerge:      c.MergeMode(),
-		CfgProxy:      c.ConfigSource.Proxy,
-		ManagedApps:   nonNil(c.ManagedApps),
+		Address:          c.Proxy.Address,
+		Port:             c.Proxy.Port,
+		Mode:             c.Mode,
+		KillSwitch:       c.KillSwitchOn(),
+		ShowTray:         c.ShowTrayEnabled(),
+		UDP:              c.UDPEnabled(),
+		DirectSubnets:    nonNil(c.DirectSubnets),
+		Apps:             nonNil(c.Apps),
+		CfgURL:           c.ConfigSource.URL,
+		CfgInterval:      c.ConfigSource.Interval,
+		CfgSigned:        c.ConfigSigned(),
+		CfgPubKey:        c.ConfigSource.PubKey,
+		CfgMerge:         c.MergeMode(),
+		CfgProxy:         c.ConfigSource.Proxy,
+		CfgPendingPubKey: c.ConfigSource.PendingPubKey,
+		ManagedApps:      nonNil(c.ManagedApps),
 	}
 }
 
@@ -524,6 +528,46 @@ func (a *app) restartForUpdate() result {
 		return result{false, err.Error()}
 	}
 	a.w.Terminate() // hand off to the new instance
+	return result{true, ""}
+}
+
+// acceptKeyRotation applies a pending managed key rotation — it moves the root of
+// trust to the server-proposed key. Requires explicit admin approval (this call).
+func (a *app) acceptKeyRotation() result {
+	c := a.loadConfig()
+	pk := strings.TrimSpace(c.ConfigSource.PendingPubKey)
+	if pk == "" {
+		return result{false, a.tr("no key rotation is pending", "нет ожидающей смены ключа")}
+	}
+	c.ConfigSource.PubKey = pk
+	c.ConfigSource.PendingPubKey = ""
+	c.ConfigSource.DeclinedPubKey = ""
+	return a.writeConfigSource(c)
+}
+
+// declineKeyRotation rejects a pending rotation; the client stops re-prompting
+// for that exact key until the server proposes a different one.
+func (a *app) declineKeyRotation() result {
+	c := a.loadConfig()
+	c.ConfigSource.DeclinedPubKey = strings.TrimSpace(c.ConfigSource.PendingPubKey)
+	c.ConfigSource.PendingPubKey = ""
+	return a.writeConfigSource(c)
+}
+
+// writeConfigSource persists c via the service (falling back to the file).
+func (a *app) writeConfigSource(c *config.Config) result {
+	b, err := yaml.Marshal(c)
+	if err != nil {
+		return result{false, err.Error()}
+	}
+	if _, err := config.Parse(b); err != nil {
+		return result{false, err.Error()}
+	}
+	if resp, err := ipc.Call(a.pipe, ipc.Request{Op: ipc.OpSetConfig, Args: map[string]string{"yaml": string(b)}}, callTimeout); err != nil || !resp.OK {
+		if werr := os.WriteFile(a.configPath, b, 0o600); werr != nil {
+			return result{false, a.tr("could not write the config file: ", "не удалось записать файл конфигурации: ") + werr.Error()}
+		}
+	}
 	return result{true, ""}
 }
 

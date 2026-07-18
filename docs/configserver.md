@@ -86,6 +86,28 @@ Clients fetch on start and on their interval, verify the signature against
 `pubkey`, and apply it. Rotating the key re-signs every profile — update every
 client's `pubkey` afterwards.
 
+## Migration (server moved / key rotation)
+
+Each profile has an optional **Migration** block, served as a signed
+`migrate.yaml` sidecar next to the config. It lets you push channel changes to
+clients centrally instead of reconfiguring each one:
+
+- **New config URL** — when the server moves. Clients apply it automatically; the
+  pinned key still guards them (a wrong/hostile URL can't forge a valid config,
+  worst case is a failed fetch), so no per-client approval is needed.
+- **Update endpoint / channel / mode** — applied automatically too; app binaries
+  are still verified against the app's built-in update key, so a bad endpoint
+  can't push a malicious binary.
+- **Rotate trusted key (new pubkey)** — moves the root of trust, so it is **never**
+  applied silently. Each client surfaces it in the panel for the local admin to
+  Accept or Decline; declined keys aren't re-prompted.
+
+Simple key rotation: put the *new* public key in the migration while the server
+still signs with the *current* key, let clients Accept it, then switch the
+server's signing key (Generate/Import). Clearing all migration fields removes the
+sidecar. Migration only reaches clients new enough to understand it; the routing
+feed itself stays backward-compatible.
+
 ## Security notes
 
 - The **private signing key** lives on the `/data` volume (`0600`), never in git

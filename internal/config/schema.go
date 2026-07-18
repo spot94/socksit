@@ -88,6 +88,14 @@ type ConfigSource struct {
 	// NOT tunnel through the very SOCKS proxy it is configuring (that fails, e.g.
 	// a loopback URL). Separate from update.proxy on purpose.
 	Proxy string `yaml:"proxy,omitempty"`
+	// PendingPubKey is a trusted-key rotation the managed server proposed (via a
+	// signed migrate sidecar) that is awaiting local admin approval. A key change
+	// moves the root of trust, so it is never applied automatically — the panel
+	// surfaces it for Accept/Decline. Empty when nothing is pending.
+	PendingPubKey string `yaml:"pending_pubkey,omitempty"`
+	// DeclinedPubKey is a proposed rotation the admin declined; the client stops
+	// re-prompting for that exact key until the server proposes a different one.
+	DeclinedPubKey string `yaml:"declined_pubkey,omitempty"`
 }
 
 // Update modes.
@@ -332,6 +340,11 @@ func (c *Config) Validate() error {
 	if pk := strings.TrimSpace(c.ConfigSource.PubKey); pk != "" {
 		if raw, err := base64.StdEncoding.DecodeString(pk); err != nil || len(raw) != 32 {
 			return fmt.Errorf("config_source.pubkey: must be a base64 32-byte Ed25519 public key")
+		}
+	}
+	if pk := strings.TrimSpace(c.ConfigSource.PendingPubKey); pk != "" {
+		if raw, err := base64.StdEncoding.DecodeString(pk); err != nil || len(raw) != 32 {
+			return fmt.Errorf("config_source.pending_pubkey: must be a base64 32-byte Ed25519 public key")
 		}
 	}
 	if m := strings.TrimSpace(c.ConfigSource.Merge); m != "" && !strings.EqualFold(m, MergeReplace) && !strings.EqualFold(m, MergeOverride) {
