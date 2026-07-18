@@ -1,0 +1,13 @@
+# Bundled preset for a turnkey build (compiled in with: -tags preset).
+# Replace these with the settings your end users should get out of the box,
+# then build the setup exe. See docs/building-installers.md.
+proxy:
+  address: 10.0.0.1
+  port: 1080
+  udp: true
+apps:
+  - chrome.exe
+direct_subnets:
+  - 192.168.0.0/16
+mode: allowlist
+kill_switch: true

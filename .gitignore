@@ -1,0 +1,31 @@
+# Build output
+/socksit.exe
+/bin/
+*.exe
+*.exe~
+
+# Engine binaries — fetched via build/fetch-engine.ps1, not committed (keeps the
+# repo lean). VERSION and *.LICENSE under assets/bin ARE tracked.
+/assets/bin/*.exe
+/assets/bin/*.dll
+
+# Go
+/vendor/
+
+# CI build staging
+/dist/
+
+# Signing key (PRIVATE — never commit; belongs in the GitHub Actions secret)
+/build/keys/
+
+# Local runtime / secrets (never commit)
+*.env
+config.json
+socksit.yaml
+
+# Generated icon preview (icon.ico itself IS tracked)
+/build/icon-preview.png
+
+# Editor/OS
+.DS_Store
+Thumbs.db

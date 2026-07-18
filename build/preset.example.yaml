@@ -1,0 +1,28 @@
+# Preset template for turnkey installer builds.
+#
+# Shape A (single exe): copy this to internal/preset/preset.yaml, edit, then
+#   go build -tags "preset embed_engine" -ldflags="-H=windowsgui" -o socksit-setup.exe ./cmd/socksit
+# Shape B (bundle): copy this to socksit.preset.yaml next to socksit.exe and ship together.
+# See docs/building-installers.md.
+
+proxy:
+  address: 10.0.0.1     # your SOCKS5 server for end users
+  port: 1080
+  username: ""          # empty for no-auth
+  password: ""
+  udp: true
+
+# IMPORTANT: use the exact running process EXE names (with .exe). For web apps
+# accessed in a browser, list the browser (chrome.exe / msedge.exe).
+apps:
+  - chrome.exe
+  - msedge.exe
+
+# Subnets that always bypass the proxy (LAN, corporate ranges, etc.).
+direct_subnets:
+  - 192.168.0.0/16
+  - 172.16.0.0/12
+  - 10.0.0.0/8
+
+mode: allowlist         # allowlist | blocklist
+kill_switch: true       # true = block proxied apps while the tunnel is down

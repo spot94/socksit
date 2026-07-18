@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SocksIt</title>
+<style>
+  :root{
+    --accent:#0e7c86; --accent-fg:#fff; --accent-weak:#0e7c8618;
+    --bg:#f4f6f8; --panel:#ffffff; --panel-2:#f8fafc; --text:#12181d; --muted:#5b6b78;
+    --border:#e2e8ee; --shadow:0 1px 2px #0f172a12,0 8px 24px #0f172a0d;
+    --ok:#1a9c53; --warn:#c47d00; --bad:#c23a3a; --radius:12px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0e1216; --panel:#161c22; --panel-2:#1b232b; --text:#e7edf2; --muted:#94a6b4;
+      --border:#26313b; --shadow:0 1px 2px #0000004d,0 10px 30px #00000040; --accent-weak:#0e7c8630; }
+  }
+  :root[data-theme="light"]{ --bg:#f4f6f8; --panel:#fff; --panel-2:#f8fafc; --text:#12181d; --muted:#5b6b78; --border:#e2e8ee; --shadow:0 1px 2px #0f172a12,0 8px 24px #0f172a0d; --accent-weak:#0e7c8618; }
+  :root[data-theme="dark"]{ --bg:#0e1216; --panel:#161c22; --panel-2:#1b232b; --text:#e7edf2; --muted:#94a6b4; --border:#26313b; --shadow:0 1px 2px #0000004d,0 10px 30px #00000040; --accent-weak:#0e7c8630; }
+
+  /* Overlay-style scrollbars: transparent track, thin translucent thumb (no light background) */
+  :root{ --thumb:#5b6b7855; --thumb-h:#5b6b7899; }
+  @media (prefers-color-scheme: dark){ :root{ --thumb:#ffffff26; --thumb-h:#ffffff4d; } }
+  :root[data-theme="light"]{ --thumb:#5b6b7855; --thumb-h:#5b6b7899; }
+  :root[data-theme="dark"]{ --thumb:#ffffff26; --thumb-h:#ffffff4d; }
+  *{scrollbar-width:thin;scrollbar-color:var(--thumb) transparent}
+  ::-webkit-scrollbar{width:12px;height:12px;background:transparent}
+  ::-webkit-scrollbar-track{background:transparent;border:none}
+  ::-webkit-scrollbar-thumb{background:var(--thumb);border-radius:10px;border:3px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:var(--thumb-h);background-clip:content-box}
+  ::-webkit-scrollbar-corner{background:transparent}
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;font:14px/1.5 system-ui,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);
+    -webkit-user-select:none;user-select:none;overflow:hidden}
+  .app{display:flex;height:100vh}
+
+  /* sidebar */
+  .side{width:236px;flex:0 0 236px;background:var(--panel);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;padding:16px 12px}
+  .brand{display:flex;align-items:center;gap:10px;padding:6px 8px 16px}
+  .brand .logo{width:30px;height:30px;border-radius:8px;background:var(--accent);position:relative;flex:0 0 auto}
+  .brand .logo::after{content:"";position:absolute;inset:0;background:
+    linear-gradient(45deg,transparent 46%,#fff 46% 54%,transparent 54%) no-repeat;
+    -webkit-mask:radial-gradient(#000,#000);opacity:.9}
+  .brand b{font-size:16px;letter-spacing:.2px}
+  .nav{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+  .nav a{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;color:var(--muted);
+    text-decoration:none;cursor:pointer;font-weight:500}
+  .nav a .ico{width:18px;text-align:center;opacity:.9}
+  .nav a:hover{background:var(--panel-2);color:var(--text)}
+  .nav a.active{background:var(--accent-weak);color:var(--accent)}
+  .side .foot{margin-top:auto;display:flex;align-items:center;gap:8px;padding:8px 6px 2px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:0 0 auto}
+  .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.bad{background:var(--bad)}
+  .sidestat{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;overflow:hidden;flex:1;min-width:0}
+  .sidestat span.txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .themebtn,.langsel{border:1px solid var(--border);background:var(--panel-2);color:var(--muted);border-radius:8px;cursor:pointer}
+  .themebtn{padding:6px 8px;font-size:14px}
+  .langsel{padding:5px 6px;font-size:12px;font-weight:600}
+  .themebtn:hover,.langsel:hover{color:var(--text)}
+
+  /* main */
+  .main{flex:1;overflow:auto;padding:26px 30px}
+  .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .head h1{font-size:20px;margin:0;font-weight:650}
+  .pill{font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:var(--panel);border:1px solid var(--border);color:var(--muted);display:inline-flex;gap:7px;align-items:center}
+  .section{display:none} .section.active{display:block}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow)}
+  .card h3{margin:0 0 3px;font-size:13px;color:var(--muted);font-weight:600}
+  .card .big{font-size:22px;font-weight:700;letter-spacing:.2px}
+  .card .sub{color:var(--muted);font-size:12.5px;margin-top:2px}
+
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .spacer{flex:1}
+  label.fld{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--muted);font-weight:600}
+  input[type=text],input[type=number],input[type=password],select,textarea{
+    background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:9px;
+    padding:9px 11px;font:inherit;outline:none;-webkit-user-select:text;user-select:text}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+  textarea{resize:vertical;min-height:64px}
+  .form{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .form .wide{grid-column:1 / -1}
+
+  button{font:inherit;font-weight:600;border-radius:9px;padding:9px 15px;border:1px solid var(--border);
+    background:var(--panel-2);color:var(--text);cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+  button.primary:hover{filter:brightness(1.06)}
+  button.danger{color:var(--bad);border-color:transparent}
+  button.danger:hover{border-color:var(--bad)}
+
+  /* switch */
+  .switch{position:relative;display:inline-flex;align-items:center;gap:10px;cursor:pointer;font-weight:600}
+  .switch input{display:none}
+  .track{width:44px;height:25px;border-radius:999px;background:var(--border);position:relative;transition:.15s;flex:0 0 auto}
+  .track::after{content:"";position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;transition:.15s;box-shadow:0 1px 2px #0006}
+  .switch input:checked + .track{background:var(--accent)}
+  .switch input:checked + .track::after{transform:translateX(19px)}
+
+  .banner{border-radius:9px;padding:10px 13px;font-size:13px;margin-top:12px;display:none;white-space:pre-line}
+  .banner.show{display:block}
+  .banner.ok{background:#1a9c5318;color:var(--ok);border:1px solid #1a9c5340}
+  .banner.err{background:#c23a3a18;color:var(--bad);border:1px solid #c23a3a40}
+  .banner.info{background:var(--accent-weak);color:var(--accent);border:1px solid var(--accent)}
+
+  .applist{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto}
+  .applist li{display:flex;align-items:center;justify-content:space-between;background:var(--panel-2);
+    border:1px solid var(--border);border-radius:8px;padding:7px 11px}
+  .applist li.empty{background:none;border:none;justify-content:flex-start}
+  .applist .x{border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0 4px}
+  .applist .x:hover{color:var(--bad)}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}
+  th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--panel)}
+  th[data-key]{cursor:pointer;user-select:none} th[data-key]:hover{color:var(--text)}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .tablewrap{max-height:56vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel)}
+
+  pre.log{background:#0b0f13;color:#d6e2ea;border:1px solid var(--border);border-radius:var(--radius);
+    padding:14px;margin:0;max-height:60vh;overflow:auto;white-space:pre-wrap;word-break:break-word;
+    font:12.5px/1.5 ui-monospace,"Cascadia Code",Consolas,monospace;-webkit-user-select:text;user-select:text}
+  .muted{color:var(--muted)} .mono{font-family:ui-monospace,Consolas,monospace}
+  .kv{display:flex;justify-content:space-between;gap:14px;padding:5px 0;border-bottom:1px solid var(--border)}
+  .kv:last-child{border-bottom:none}
+  a.link{color:var(--accent);cursor:pointer}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><div class="logo"></div><b>SocksIt</b></div>
+    <nav class="nav" id="nav">
+      <a data-section="dashboard" class="active"><span class="ico">▊</span><span data-i18n="nav.dashboard">Dashboard</span></a>
+      <a data-section="settings"><span class="ico">⚙</span><span data-i18n="nav.settings">Settings</span></a>
+      <a data-section="statistics"><span class="ico">📊</span><span data-i18n="nav.statistics">Statistics</span></a>
+      <a data-section="logs"><span class="ico">📄</span><span data-i18n="nav.logs">Logs</span></a>
+      <a data-section="diagnostics"><span class="ico">🩺</span><span data-i18n="nav.diagnostics">Diagnostics</span></a>
+      <a data-section="about"><span class="ico">ℹ</span><span data-i18n="nav.about">About</span></a>
+    </nav>
+    <div class="foot">
+      <div class="sidestat"><span class="dot" id="sideDot"></span><span class="txt" id="sideStat">…</span></div>
+      <select id="langSel" class="langsel" data-i18n-title="lang.title">
+        <option value="en">EN</option>
+        <option value="ru">RU</option>
+      </select>
+      <button class="themebtn" id="themeBtn" data-i18n-title="theme.title">◐</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="head"><h1 id="title">Dashboard</h1><span class="pill" id="statePill"><span class="dot" id="pillDot"></span><span id="pillText">…</span></span></div>
+
+    <!-- DASHBOARD -->
+    <section class="section active" id="s-dashboard">
+      <div id="elevateBanner" class="banner info" style="margin-top:0;margin-bottom:14px">
+        <span data-i18n="dash.elevate">Administrator rights are needed to install/start/stop the service.</span>
+        <a class="link" id="elevateBtn" data-i18n="dash.elevateBtn">Restart as administrator</a>
+      </div>
+      <div class="grid" style="margin-bottom:16px">
+        <div class="card"><h3 data-i18n="card.status">Status</h3><div class="big" id="dStatus">…</div><div class="sub" id="dEngine"></div></div>
+        <div class="card"><h3 data-i18n="card.proxy">Proxy</h3><div class="big mono" id="dProxy">—</div><div class="sub" id="dApps"></div></div>
+        <div class="card"><h3 data-i18n="card.proxying">Proxying</h3>
+          <label class="switch" style="margin-top:6px"><input type="checkbox" id="dToggle"><span class="track"></span><span id="dToggleLbl">Enabled</span></label>
+          <div class="sub" id="dKill"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row">
+          <button class="primary" id="btnSetup" data-i18n="btn.setup">Set up</button>
+          <button id="btnStart" data-i18n="btn.start">Start</button>
+          <button id="btnStop" data-i18n="btn.stop">Stop</button>
+          <button id="btnTest" data-i18n="btn.test">Test proxy</button>
+          <div class="spacer"></div>
+          <button class="danger" id="btnUninstall" data-i18n="btn.uninstall">Uninstall</button>
+        </div>
+        <div class="banner" id="dashBanner"></div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="section" id="s-settings">
+      <div class="card">
+        <div class="form">
+          <label class="fld"><span data-i18n="lbl.address">Proxy address</span><input type="text" id="fAddress" data-i18n-ph="ph.address"></label>
+          <label class="fld"><span data-i18n="lbl.port">Port</span><input type="number" id="fPort" min="1" max="65535" placeholder="1080"></label>
+          <label class="fld"><span data-i18n="lbl.username">Username</span> <span class="muted" data-i18n="note.userBlank">(blank = keep/none)</span><input type="text" id="fUser" data-i18n-ph="ph.keep"></label>
+          <label class="fld"><span data-i18n="lbl.password">Password</span> <span class="muted" data-i18n="note.passBlank">(blank = keep)</span><input type="password" id="fPass" data-i18n-ph="ph.keep"></label>
+          <label class="fld"><span data-i18n="lbl.mode">Mode</span><select id="fMode"><option value="allowlist" data-i18n="opt.allowlist">allowlist — only listed apps</option><option value="blocklist" data-i18n="opt.blocklist">blocklist — all except listed</option></select></label>
+          <label class="fld"><span data-i18n="lbl.bypass">Bypass subnets</span><input type="text" id="fSubnets" placeholder="192.168.1.0/24, 172.16.0.0/16"></label>
+          <div class="wide row" style="gap:22px">
+            <label class="switch"><input type="checkbox" id="fKill"><span class="track"></span><span data-i18n="sw.killswitch">Kill-switch</span></label>
+            <label class="switch"><input type="checkbox" id="fUdp"><span class="track"></span><span data-i18n="sw.udp">Proxy UDP</span></label>
+            <label class="switch"><input type="checkbox" id="fTray"><span class="track"></span><span data-i18n="sw.tray">Show in tray</span></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <h3 data-i18n="h.proxiedApps">Proxied applications</h3>
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="fApp" list="procList" data-i18n-ph="ph.app" style="flex:1;min-width:200px">
+          <datalist id="procList"></datalist>
+          <button id="btnBrowse" data-i18n="btn.browse">Browse…</button>
+          <button id="btnAddApp" data-i18n="btn.add">Add</button>
+          <button id="btnReloadProc" data-i18n-title="title.reloadProc">↻</button>
+        </div>
+        <ul class="applist" id="appList"></ul>
+        <div class="sub muted" style="margin-top:8px" data-i18n="hint.apps">Exact .exe name (any folder) or a full path. For web apps add the browser (chrome.exe / msedge.exe).</div>
+      </div>
+
+      <div class="row" style="margin-top:14px">
+        <button class="primary" id="btnSave" data-i18n="btn.save">Save &amp; apply</button>
+        <button id="btnTest2" data-i18n="btn.test">Test proxy</button>
+      </div>
+      <div class="banner" id="setBanner"></div>
+    </section>
+
+    <!-- STATISTICS -->
+    <section class="section" id="s-statistics">
+      <div class="row" style="margin-bottom:12px">
+        <span class="muted" id="statTotals">—</span>
+        <div class="spacer"></div>
+        <input type="text" id="statFilter" data-i18n-ph="ph.filter" style="width:180px">
+        <label class="switch"><input type="checkbox" id="statAuto"><span class="track"></span><span data-i18n="sw.auto">Auto</span></label>
+        <button id="btnStats" data-i18n="btn.refresh">Refresh</button>
+      </div>
+      <div class="tablewrap">
+        <table><thead><tr>
+          <th data-key="process">Process</th><th data-key="destination">Destination</th>
+          <th data-key="net">Net</th><th data-key="via">Via</th>
+          <th data-key="up" style="text-align:right">Up</th><th data-key="down" style="text-align:right">Down</th>
+        </tr></thead>
+        <tbody id="statBody"></tbody></table>
+      </div>
+    </section>
+
+    <!-- LOGS -->
+    <section class="section" id="s-logs">
+      <div class="row" style="margin-bottom:12px">
+        <button id="btnLogs" data-i18n="btn.refresh">Refresh</button>
+        <label class="switch"><input type="checkbox" id="logAuto"><span class="track"></span><span data-i18n="sw.auto">Auto</span></label>
+        <label class="fld" style="flex-direction:row;align-items:center;gap:8px"><span data-i18n="lbl.lines">Lines</span>
+          <select id="logLines"><option>200</option><option selected>500</option><option>1000</option><option>2000</option></select></label>
+        <div class="spacer"></div>
+      </div>
+      <pre class="log" id="logText">…</pre>
+    </section>
+
+    <!-- DIAGNOSTICS -->
+    <section class="section" id="s-diagnostics">
+      <div class="row" style="margin-bottom:12px">
+        <button class="primary" id="btnDiag" data-i18n="btn.runDiag">Run diagnostics</button>
+        <button id="btnDiagCopy" data-i18n="btn.copy">Copy</button>
+        <span class="muted" data-i18n="diag.desc">Checks service, engine, config, proxy reachability and which apps are running.</span>
+      </div>
+      <pre class="log" id="diagText"></pre>
+    </section>
+
+    <!-- ABOUT -->
+    <section class="section" id="s-about">
+      <div class="card" style="max-width:560px">
+        <div class="brand" style="padding:0 0 12px"><div class="logo"></div><b style="font-size:18px">SocksIt</b></div>
+        <div class="kv"><span class="muted" data-i18n="about.version">Version</span><span class="mono" id="aVer">—</span></div>
+        <div class="kv"><span class="muted" data-i18n="about.engine">Engine</span><span class="mono">sing-box v1.13.14</span></div>
+        <div class="kv"><span class="muted" data-i18n="about.config">Config</span><span class="mono">%ProgramData%\SocksIt\socksit.yaml</span></div>
+        <p class="muted" style="margin:14px 0 0" data-i18n="about.desc">Per-application SOCKS5 proxifier for Windows. Routes selected apps through a SOCKS5 proxy via a TUN adapter, automatically — no per-app launching.</p>
+      </div>
+
+      <div class="card" style="max-width:560px;margin-top:14px">
+        <h3 data-i18n="upd.title">Updates</h3>
+        <div class="form" style="margin-top:8px">
+          <label class="fld wide"><span data-i18n="upd.endpoint">Update source (URL)</span><input type="text" id="uEndpoint" data-i18n-ph="upd.endpointPh"></label>
+          <label class="fld"><span data-i18n="upd.channel">Channel</span><input type="text" id="uChannel" placeholder="stable"></label>
+          <label class="fld"><span data-i18n="upd.mode">Mode</span><select id="uMode">
+            <option value="off" data-i18n="upd.mode.off">Off</option>
+            <option value="notify" data-i18n="upd.mode.notify">Notify</option>
+            <option value="auto" data-i18n="upd.mode.auto">Auto</option></select></label>
+          <label class="fld"><span data-i18n="upd.interval">Check interval</span><input type="text" id="uInterval" placeholder="24h"></label>
+          <label class="fld wide"><span data-i18n="upd.proxy">Proxy for checks</span><input type="text" id="uProxy" data-i18n-ph="upd.proxyPh"></label>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="primary" id="btnUpdSave" data-i18n="upd.save">Save</button>
+          <button id="btnUpdCheck" data-i18n="upd.check">Check now</button>
+          <span class="muted" id="updStatus"></span>
+        </div>
+        <div class="sub muted" style="margin-top:8px" data-i18n="upd.hint">Trust is verified by signature — the source/CDN is untrusted.</div>
+        <div class="banner" id="updBanner"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+/* ---------- i18n ---------- */
+const I18N = {
+  en: {
+    'nav.dashboard':'Dashboard','nav.settings':'Settings','nav.statistics':'Statistics','nav.logs':'Logs','nav.diagnostics':'Diagnostics','nav.about':'About',
+    'lang.title':'Language','theme.title':'Toggle theme',
+    'dash.elevate':'Administrator rights are needed to install/start/stop the service.','dash.elevateBtn':'Restart as administrator',
+    'card.status':'Status','card.proxy':'Proxy','card.proxying':'Proxying',
+    'toggle.enabled':'Enabled','toggle.paused':'Paused',
+    'btn.setup':'Set up (install · preset · start)','btn.start':'Start','btn.stop':'Stop','btn.test':'Test proxy','btn.uninstall':'Uninstall',
+    'status.notInstalled':'Service not installed','status.stopped':'Service stopped','status.paused':'Proxying paused','status.active':'Active — proxying on','status.tunnelDown':'Tunnel down — apps blocked (kill-switch)',
+    'engine.up':'engine up · pid {pid}','engine.paused':'engine paused','engine.down':'engine down','engine.other':'engine {state}',
+    'appsLine':'{n} app(s) · {mode}','killLine':'kill-switch {ks} · tray {tray}','on':'on','off':'off',
+    'mode.allowlist':'allowlist','mode.blocklist':'blocklist',
+    'lbl.address':'Proxy address','ph.address':'10.0.0.1 or proxy.host','lbl.port':'Port',
+    'lbl.username':'Username','note.userBlank':'(blank = keep/none)','lbl.password':'Password','note.passBlank':'(blank = keep)','ph.keep':'leave blank to keep current',
+    'lbl.mode':'Mode','opt.allowlist':'allowlist — only listed apps','opt.blocklist':'blocklist — all except listed',
+    'lbl.bypass':'Bypass subnets','sw.killswitch':'Kill-switch','sw.udp':'Proxy UDP','sw.tray':'Show in tray',
+    'h.proxiedApps':'Proxied applications','ph.app':'app.exe or full path','btn.browse':'Browse…','btn.add':'Add','title.reloadProc':'Refresh running processes',
+    'hint.apps':'Exact .exe name (any folder) or a full path. For web apps add the browser (chrome.exe / msedge.exe).','btn.save':'Save & apply',
+    'msg.noApps':'No apps yet.','title.remove':'Remove',
+    'ph.filter':'filter…','sw.auto':'Auto','btn.refresh':'Refresh',
+    'th.process':'Process','th.destination':'Destination','th.net':'Net','th.via':'Via','th.up':'Up','th.down':'Down',
+    'stat.noData':'No data yet — click Refresh.','stat.noMatch':'No matching connections.',
+    'lbl.lines':'Lines','btn.runDiag':'Run diagnostics','btn.copy':'Copy',
+    'diag.desc':'Checks service, engine, config, proxy reachability and which apps are running.','diag.placeholder':'Click “Run diagnostics”.','diag.running':'Running…',
+    'about.version':'Version','about.engine':'Engine','about.config':'Config',
+    'about.desc':'Per-application SOCKS5 proxifier for Windows. Routes selected apps through a SOCKS5 proxy via a TUN adapter, automatically — no per-app launching.',
+    'msg.working':'Working…','msg.saving':'Saving…','msg.testing':'Testing proxy…','msg.setAddrFirst':'Set a proxy address first (Settings).',
+    'log.empty':'(empty)',
+    'upd.title':'Updates','upd.endpoint':'Update source (URL)','upd.endpointPh':'https://github.com/<owner>/<repo>/releases/latest/download',
+    'upd.channel':'Channel','upd.mode':'Mode','upd.mode.off':'Off','upd.mode.notify':'Notify','upd.mode.auto':'Auto',
+    'upd.interval':'Check interval','upd.proxy':'Proxy for checks','upd.proxyPh':'empty=direct · system · use-socks · socks5://host:port',
+    'upd.save':'Save','upd.check':'Check now','upd.upToDate':'Up to date (v{v})','upd.available':'Update available: v{v}','upd.checking':'Checking…','upd.hint':'Trust is verified by signature — the source/CDN is untrusted.'
+  },
+  ru: {
+    'nav.dashboard':'Обзор','nav.settings':'Настройки','nav.statistics':'Статистика','nav.logs':'Логи','nav.diagnostics':'Диагностика','nav.about':'О программе',
+    'lang.title':'Язык','theme.title':'Переключить тему',
+    'dash.elevate':'Для установки/запуска/остановки службы нужны права администратора.','dash.elevateBtn':'Перезапустить от администратора',
+    'card.status':'Состояние','card.proxy':'Прокси','card.proxying':'Проксирование',
+    'toggle.enabled':'Включено','toggle.paused':'На паузе',
+    'btn.setup':'Установить (служба · пресет · запуск)','btn.start':'Запустить','btn.stop':'Остановить','btn.test':'Проверить прокси','btn.uninstall':'Удалить',
+    'status.notInstalled':'Служба не установлена','status.stopped':'Служба остановлена','status.paused':'Проксирование на паузе','status.active':'Активно — проксирование включено','status.tunnelDown':'Туннель не поднят — приложения заблокированы (kill-switch)',
+    'engine.up':'движок работает · pid {pid}','engine.paused':'движок на паузе','engine.down':'движок остановлен','engine.other':'движок: {state}',
+    'appsLine':'приложений: {n} · {mode}','killLine':'kill-switch {ks} · трей {tray}','on':'вкл','off':'выкл',
+    'mode.allowlist':'allowlist','mode.blocklist':'blocklist',
+    'lbl.address':'Адрес прокси','ph.address':'10.0.0.1 или proxy.host','lbl.port':'Порт',
+    'lbl.username':'Логин','note.userBlank':'(пусто = не менять/без авторизации)','lbl.password':'Пароль','note.passBlank':'(пусто = не менять)','ph.keep':'пусто — оставить текущий',
+    'lbl.mode':'Режим','opt.allowlist':'allowlist — только выбранные','opt.blocklist':'blocklist — все, кроме выбранных',
+    'lbl.bypass':'Прямые подсети','sw.killswitch':'Kill-switch','sw.udp':'Проксировать UDP','sw.tray':'Значок в трее',
+    'h.proxiedApps':'Проксируемые приложения','ph.app':'app.exe или полный путь','btn.browse':'Обзор…','btn.add':'Добавить','title.reloadProc':'Обновить список процессов',
+    'hint.apps':'Точное имя .exe (в любой папке) или полный путь. Для веб-приложений добавьте браузер (chrome.exe / msedge.exe).','btn.save':'Сохранить и применить',
+    'msg.noApps':'Пока нет приложений.','title.remove':'Удалить',
+    'ph.filter':'фильтр…','sw.auto':'Авто','btn.refresh':'Обновить',
+    'th.process':'Процесс','th.destination':'Назначение','th.net':'Сеть','th.via':'Через','th.up':'Отпр.','th.down':'Получ.',
+    'stat.noData':'Пока нет данных — нажмите «Обновить».','stat.noMatch':'Нет подходящих соединений.',
+    'lbl.lines':'Строк','btn.runDiag':'Запустить диагностику','btn.copy':'Копировать',
+    'diag.desc':'Проверяет службу, движок, конфиг, доступность прокси и какие приложения запущены.','diag.placeholder':'Нажмите «Запустить диагностику».','diag.running':'Выполняется…',
+    'about.version':'Версия','about.engine':'Движок','about.config':'Конфиг',
+    'about.desc':'Проксификатор приложений под Windows поверх SOCKS5. Направляет выбранные приложения в SOCKS5-прокси через TUN-адаптер автоматически — не нужно запускать приложения по-особому.',
+    'msg.working':'Выполняется…','msg.saving':'Сохранение…','msg.testing':'Проверка прокси…','msg.setAddrFirst':'Сначала укажите адрес прокси (Настройки).',
+    'log.empty':'(пусто)',
+    'upd.title':'Обновления','upd.endpoint':'Источник обновлений (URL)','upd.endpointPh':'https://github.com/<owner>/<repo>/releases/latest/download',
+    'upd.channel':'Канал','upd.mode':'Режим','upd.mode.off':'Выкл','upd.mode.notify':'Уведомлять','upd.mode.auto':'Авто',
+    'upd.interval':'Интервал проверки','upd.proxy':'Прокси для проверок','upd.proxyPh':'пусто=напрямую · system · use-socks · socks5://host:port',
+    'upd.save':'Сохранить','upd.check':'Проверить сейчас','upd.upToDate':'Актуальная версия (v{v})','upd.available':'Доступно обновление: v{v}','upd.checking':'Проверка…','upd.hint':'Подлинность проверяется подписью — источник/CDN недоверенный.'
+  }
+};
+let lang = 'en';
+function t(k, p){
+  let s = (I18N[lang] && I18N[lang][k]);
+  if (s == null) s = (I18N.en[k] != null ? I18N.en[k] : k);
+  if (p) for (const kk in p) s = s.split('{'+kk+'}').join(p[kk]);
+  return s;
+}
+function applyLang(l){
+  lang = I18N[l] ? l : 'en';
+  document.documentElement.setAttribute('lang', lang);
+  document.querySelectorAll('[data-i18n]').forEach(e => { e.textContent = t(e.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(e => { e.setAttribute('placeholder', t(e.dataset.i18nPh)); });
+  document.querySelectorAll('[data-i18n-title]').forEach(e => { e.setAttribute('title', t(e.dataset.i18nTitle)); });
+  document.getElementById('title').textContent = t('nav.'+currentSection);
+  if (last && last.installed !== undefined) renderState(last);
+  renderApps();
+  renderStats();
+  renderUpdateStatus();
+  if (!diagRan) document.getElementById('diagText').textContent = t('diag.placeholder');
+}
+
+/* ---------- RPC ---------- */
+const call = (name, ...a) => window[name](...a);           // fast binds return a Promise
+const g = (id) => document.getElementById(id);
+let _seq = 0; const _pending = {};
+window.__result = (id, payload) => { const r = _pending[id]; if (r) { delete _pending[id]; r(payload); } };
+function job(starter, ...args){ return new Promise(res => { const id = 'j'+(++_seq); _pending[id] = res; window[starter](id, ...args); }); }
+
+/* ---------- theme ---------- */
+let theme = 'system';
+function effectiveDark(){
+  if (theme === 'dark') return true;
+  if (theme === 'light') return false;
+  return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+}
+function syncNativeTheme(){ try { window.appSetDark(effectiveDark()); } catch(e){} }
+function applyTheme(th){
+  theme = th;
+  const root = document.documentElement;
+  if (th === 'system') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', th);
+  document.getElementById('themeBtn').textContent = th === 'dark' ? '☀' : (th === 'light' ? '☾' : '◐');
+  syncNativeTheme();
+}
+if (window.matchMedia){ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ()=>{ if(theme==='system') syncNativeTheme(); }); }
+document.getElementById('themeBtn').onclick = () => {
+  const order = { system:'light', light:'dark', dark:'system' };
+  const next = order[theme] || 'light';
+  applyTheme(next); call('appSetTheme', next);
+};
+document.getElementById('langSel').onchange = e => { applyLang(e.target.value); try{ call('appSetLang', lang); }catch(_){} };
+
+/* ---------- nav ---------- */
+let currentSection = 'dashboard';
+function show(sec){
+  currentSection = sec;
+  document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('active', a.dataset.section===sec));
+  document.querySelectorAll('.section').forEach(s=>s.classList.toggle('active', s.id==='s-'+sec));
+  document.getElementById('title').textContent = t('nav.'+sec);
+  if (sec === 'settings') loadSettings();
+  if (sec === 'statistics') refreshStats();
+  if (sec === 'logs') refreshLogs();
+  if (sec === 'about') loadUpdate();
+}
+document.getElementById('nav').addEventListener('click', e => { const a=e.target.closest('a'); if(a) show(a.dataset.section); });
+
+/* ---------- helpers ---------- */
+function banner(el, kind, msg){ el.className = 'banner show ' + kind; el.textContent = msg; }
+function setDot(el, engine, installed, running){
+  el.className = 'dot' + (!installed||!running ? ' bad' : engine==='up' ? ' ok' : ' warn');
+}
+function statusLabel(s){
+  if (!s.installed) return t('status.notInstalled');
+  if (!s.running)   return t('status.stopped');
+  if (!s.enabled)   return t('status.paused');
+  if (s.engine === 'up') return t('status.active');
+  return t('status.tunnelDown');
+}
+
+/* ---------- dashboard ---------- */
+let last = {};
+function renderState(s){
+  last = s;
+  const stext = statusLabel(s);
+  document.getElementById('dStatus').textContent = stext;
+  let eng;
+  if (s.engine === 'up') eng = t('engine.up', {pid:s.pid});
+  else if (s.engine === 'paused') eng = t('engine.paused');
+  else if (s.engine === 'down') eng = t('engine.down');
+  else eng = t('engine.other', {state:s.engine});
+  document.getElementById('dEngine').textContent = eng;
+  document.getElementById('dProxy').textContent = s.proxy || '—';
+  document.getElementById('dApps').textContent = t('appsLine', {n:s.apps, mode:t('mode.'+s.mode)});
+  document.getElementById('dKill').textContent = t('killLine', {ks:s.killSwitch?t('on'):t('off'), tray:s.showTray?t('on'):t('off')});
+  const tg = document.getElementById('dToggle'); tg.checked = s.enabled; tg.disabled = !s.running;
+  document.getElementById('dToggleLbl').textContent = s.enabled ? t('toggle.enabled') : t('toggle.paused');
+  document.getElementById('elevateBanner').style.display = s.elevated ? 'none' : 'block';
+  document.getElementById('btnSetup').disabled = !s.elevated || s.installed;
+  document.getElementById('btnStart').disabled = !s.elevated || !s.installed || s.running;
+  document.getElementById('btnStop').disabled  = !s.elevated || !s.running;
+  document.getElementById('btnUninstall').disabled = !s.elevated || !s.installed;
+  document.getElementById('pillText').textContent = stext;
+  document.getElementById('sideStat').textContent = stext;
+  setDot(document.getElementById('pillDot'), s.engine, s.installed, s.running);
+  setDot(document.getElementById('sideDot'), s.engine, s.installed, s.running);
+  document.getElementById('aVer').textContent = s.version;
+}
+async function refreshState(){ renderState(await call('appState')); }
+document.getElementById('dToggle').onchange = async (e)=>{ const r = await call('appToggle', e.target.checked); if(!r.ok) banner(document.getElementById('dashBanner'),'err',r.message); refreshState(); };
+document.getElementById('elevateBtn').onclick = ()=> call('appElevate');
+async function svc(action, btn){
+  const db = document.getElementById('dashBanner'); banner(db,'info',t('msg.working')); btn && (btn.disabled=true);
+  const r = await job('startServiceAction', action);
+  banner(db, r.ok?'ok':'err', r.message); refreshState();
+}
+document.getElementById('btnSetup').onclick = e=>svc('setup', e.target);
+document.getElementById('btnStart').onclick = e=>svc('start', e.target);
+document.getElementById('btnStop').onclick = e=>svc('stop', e.target);
+document.getElementById('btnUninstall').onclick = e=>svc('uninstall', e.target);
+document.getElementById('btnTest').onclick = ()=>testProxy(document.getElementById('dashBanner'));
+
+/* ---------- settings ---------- */
+let apps = [];
+function renderApps(){
+  const ul = document.getElementById('appList'); if(!ul) return; ul.innerHTML='';
+  if(!apps.length){ const li=document.createElement('li'); li.className='muted empty'; li.textContent=t('msg.noApps'); ul.appendChild(li); return; }
+  apps.forEach((a,i)=>{ const li=document.createElement('li'); const s=document.createElement('span'); s.className='mono'; s.textContent=a; li.appendChild(s);
+    const x=document.createElement('button'); x.className='x'; x.textContent='×'; x.title=t('title.remove');
+    x.onclick=()=>{ apps.splice(i,1); renderApps(); }; li.appendChild(x); ul.appendChild(li); });
+}
+async function loadSettings(){
+  const c = await call('appGetConfig');
+  document.getElementById('fAddress').value = c.address||'';
+  document.getElementById('fPort').value = c.port||1080;
+  document.getElementById('fUser').value = '';
+  document.getElementById('fPass').value = '';
+  document.getElementById('fMode').value = c.mode||'allowlist';
+  document.getElementById('fSubnets').value = (c.directSubnets||[]).join(', ');
+  document.getElementById('fKill').checked = !!c.killSwitch;
+  document.getElementById('fUdp').checked = !!c.udp;
+  document.getElementById('fTray').checked = !!c.showTray;
+  apps = (c.apps||[]).slice(); renderApps();
+  loadProcs();
+}
+async function loadProcs(){
+  const names = await call('appProcesses'); const dl = document.getElementById('procList');
+  dl.innerHTML = names.map(n=>'<option value="'+escapeHtml(n)+'">').join('');
+}
+document.getElementById('btnReloadProc').onclick = loadProcs;
+document.getElementById('btnBrowse').onclick = async ()=>{ const p = await call('appBrowseExe'); if(p){ const i=document.getElementById('fApp'); i.value = p; i.focus(); } };
+document.getElementById('btnAddApp').onclick = ()=>{ const i=document.getElementById('fApp'); const v=(i.value||'').trim(); if(v){ apps.push(v); i.value=''; renderApps(); } };
+document.getElementById('fApp').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); document.getElementById('btnAddApp').click(); }});
+function collect(){
+  const subs = (document.getElementById('fSubnets').value||'').split(/[\s,;]+/).filter(Boolean);
+  return { address:document.getElementById('fAddress').value.trim(), port:parseInt(document.getElementById('fPort').value||'1080',10),
+    username:document.getElementById('fUser').value, password:document.getElementById('fPass').value,
+    mode:document.getElementById('fMode').value, killSwitch:document.getElementById('fKill').checked,
+    udp:document.getElementById('fUdp').checked, showTray:document.getElementById('fTray').checked,
+    directSubnets:subs, apps:apps.slice() };
+}
+document.getElementById('btnSave').onclick = async ()=>{ const b=document.getElementById('setBanner'); banner(b,'info',t('msg.saving'));
+  const r = await call('appSaveConfig', collect()); banner(b, r.ok?'ok':'err', r.message); refreshState(); };
+document.getElementById('btnTest2').onclick = ()=>testProxy(document.getElementById('setBanner'), true);
+
+async function testProxy(bannerEl, fromSettings){
+  banner(bannerEl,'info',t('msg.testing'));
+  let addr, port, user, pass;
+  if(fromSettings){ const c=collect(); addr=c.address; port=c.port; user=c.username; pass=c.password; }
+  else { const c=await call('appGetConfig'); addr=c.address; port=c.port; user=''; pass=''; }
+  if(!addr){ banner(bannerEl,'err',t('msg.setAddrFirst')); return; }
+  const r = await job('startTestProxy', addr, port, user, pass);
+  banner(bannerEl, r.ok?'ok':'err', r.message);
+}
+
+/* ---------- statistics ---------- */
+let statRows = [];
+let sortKey='', sortDir=1;
+async function refreshStats(){
+  const r = await job('startStats');
+  if(r.error){ document.getElementById('statTotals').textContent = r.error; statRows=[]; renderStats(); return; }
+  statRows = r.rows||[]; document.getElementById('statTotals').textContent = r.totals||''; renderStats();
+}
+function sortRows(rows){
+  if(!sortKey) return rows;
+  const numeric = sortKey==='up' || sortKey==='down';
+  const key = sortKey==='up'?'upB':sortKey==='down'?'downB':sortKey;
+  return rows.slice().sort((a,b)=>{
+    if(numeric) return ((a[key]||0)-(b[key]||0))*sortDir;
+    const x=(a[key]||'').toString().toLowerCase(), y=(b[key]||'').toString().toLowerCase();
+    return (x<y?-1:x>y?1:0)*sortDir;
+  });
+}
+function renderStats(){
+  const fEl=document.getElementById('statFilter'); const q = (fEl?fEl.value:'').toLowerCase();
+  let rows = statRows.filter(r=>!q || (r.process+' '+r.destination+' '+r.net+' '+r.via).toLowerCase().includes(q));
+  rows = sortRows(rows);
+  document.querySelectorAll('#s-statistics th[data-key]').forEach(th=>{
+    const k=th.dataset.key; th.textContent = t('th.'+k) + (sortKey===k ? (sortDir>0?' ▲':' ▼') : '');
+  });
+  const b = document.getElementById('statBody');
+  if(!rows.length){ b.innerHTML='<tr><td colspan="6" class="muted">'+(statRows.length?t('stat.noMatch'):t('stat.noData'))+'</td></tr>'; return; }
+  b.innerHTML = rows.map(r=>'<tr><td>'+escapeHtml(r.process)+'</td><td>'+escapeHtml(r.destination)+'</td><td>'+escapeHtml(r.net)+
+    '</td><td>'+escapeHtml(r.via)+'</td><td class="num">'+escapeHtml(r.up)+'</td><td class="num">'+escapeHtml(r.down)+'</td></tr>').join('');
+}
+document.getElementById('btnStats').onclick = refreshStats;
+document.getElementById('statFilter').oninput = renderStats;
+document.querySelectorAll('#s-statistics th[data-key]').forEach(th=>{
+  th.onclick = ()=>{ const k=th.dataset.key; if(sortKey===k) sortDir=-sortDir; else { sortKey=k; sortDir=1; } renderStats(); };
+});
+
+/* ---------- logs ---------- */
+async function refreshLogs(){
+  const n = parseInt(document.getElementById('logLines').value||'500',10);
+  const r = await call('appLogs', n); const pre=document.getElementById('logText');
+  pre.textContent = r.text || t('log.empty'); pre.scrollTop = pre.scrollHeight;
+}
+document.getElementById('btnLogs').onclick = refreshLogs;
+document.getElementById('logLines').onchange = refreshLogs;
+
+/* ---------- diagnostics ---------- */
+let diagRan = false;
+document.getElementById('btnDiag').onclick = async ()=>{ const p=document.getElementById('diagText'); p.textContent=t('diag.running');
+  const r = await job('startDiagnostics'); diagRan=true; p.textContent = r.text || '—'; };
+document.getElementById('btnDiagCopy').onclick = ()=>{ const txt=document.getElementById('diagText').textContent;
+  const ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); }catch(e){} ta.remove(); };
+
+/* ---------- updates (About) ---------- */
+let lastUpd = null;
+async function loadUpdate(){
+  const u = await call('appGetUpdate');
+  g('uEndpoint').value = u.endpoint || '';
+  g('uChannel').value  = u.channel || 'stable';
+  g('uMode').value     = u.mode || 'notify';
+  g('uInterval').value = u.checkInterval || '24h';
+  g('uProxy').value    = u.proxy || '';
+  try{ lastUpd = await call('appUpdateStatus'); }catch(e){ lastUpd = null; }
+  renderUpdateStatus();
+}
+function pickNotes(r){ return lang==='ru' ? (r.notesRu||r.notesEn||'') : (r.notesEn||r.notesRu||''); }
+function renderUpdateStatus(){
+  const el = g('updStatus'); const r = lastUpd; if(!el) return;
+  if(!r){ el.textContent=''; return; }
+  if(r.error){ el.textContent = r.error; return; }
+  if(r.hasUpdate){ const n=pickNotes(r); el.textContent = t('upd.available',{v:r.available}) + (n?' — '+n:''); }
+  else if(r.available){ el.textContent = t('upd.upToDate',{v:r.current}); }
+  else { el.textContent = ''; }
+}
+g('btnUpdSave').onclick = async ()=>{ const b=g('updBanner'); banner(b,'info',t('msg.saving'));
+  const r = await call('appSaveUpdate', { endpoint:g('uEndpoint').value.trim(), channel:g('uChannel').value.trim()||'stable',
+    mode:g('uMode').value, checkInterval:g('uInterval').value.trim()||'24h', proxy:g('uProxy').value.trim() });
+  banner(b, r.ok?'ok':'err', r.message); };
+g('btnUpdCheck').onclick = async ()=>{ g('updStatus').textContent=t('upd.checking'); lastUpd = await job('startUpdateCheck'); renderUpdateStatus(); };
+
+/* ---------- utils + boot ---------- */
+function escapeHtml(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+let statTimer=null, logTimer=null;
+document.getElementById('statAuto').onchange = e=>{ clearInterval(statTimer); if(e.target.checked) statTimer=setInterval(()=>{ if(document.getElementById('s-statistics').classList.contains('active')) refreshStats(); }, 2000); };
+document.getElementById('logAuto').onchange  = e=>{ clearInterval(logTimer);  if(e.target.checked) logTimer =setInterval(()=>{ if(document.getElementById('s-logs').classList.contains('active')) refreshLogs(); }, 2000); };
+
+(async function boot(){
+  try{ applyTheme(await call('appGetTheme')); }catch(e){ applyTheme('system'); }
+  let l = '';
+  try{ l = await call('appGetLang'); }catch(e){}
+  if(!l){ l = (navigator.language||'en').toLowerCase().indexOf('ru')===0 ? 'ru' : 'en'; }
+  applyLang(l);
+  document.getElementById('langSel').value = lang;
+  try{ call('appSetLang', lang); }catch(e){}
+  await refreshState();
+  show(window.__initialSection || 'dashboard');
+  setInterval(refreshState, 1500);
+})();
+</script>
+</body>
+</html>

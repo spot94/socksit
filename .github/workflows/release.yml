@@ -1,0 +1,73 @@
+name: release
+
+# Publishes a signed release when you push a version tag, e.g.:
+#   git tag v0.1.0 && git push origin v0.1.0
+# Requires repo secret SOCKSIT_SIGN_KEY = base64 Ed25519 private key (from
+# `go run ./cmd/mksign genkey`). The matching public key is compiled into the
+# binary (internal/updates.bakedKeys). See docs/update-design.md.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Derive version + engine version
+        id: meta
+        shell: bash
+        run: |
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          echo "engine=$(sed -n 's/^SINGBOX_VERSION=//p' assets/bin/VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch pinned sing-box engine
+        shell: pwsh
+        run: pwsh -File build/fetch-engine.ps1
+
+      - name: Build socksit.exe
+        shell: bash
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          mkdir -p dist
+          go build -trimpath \
+            -ldflags "-H=windowsgui -s -w -X main.Version=${{ steps.meta.outputs.version }}" \
+            -o dist/socksit.exe ./cmd/socksit
+          cp assets/bin/sing-box.exe dist/sing-box.exe
+
+      - name: Build + sign manifest
+        shell: bash
+        env:
+          SOCKSIT_SIGN_KEY: ${{ secrets.SOCKSIT_SIGN_KEY }}
+        run: |
+          BASE="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
+          go run ./cmd/mksign build \
+            -app dist/socksit.exe \
+            -engine dist/sing-box.exe \
+            -engine-version "${{ steps.meta.outputs.engine }}" \
+            -version "${{ steps.meta.outputs.version }}" \
+            -channel stable \
+            -base-url "$BASE" \
+            -notes-en "SocksIt ${{ steps.meta.outputs.version }}. See the commit history for changes." \
+            -notes-ru "SocksIt ${{ steps.meta.outputs.version }}. Изменения — в истории коммитов." \
+            -out dist
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: SocksIt ${{ steps.meta.outputs.version }}
+          files: |
+            dist/socksit.exe
+            dist/sing-box.exe
+            dist/manifest.json
+            dist/manifest.json.sig

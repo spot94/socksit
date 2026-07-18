@@ -1,0 +1,9 @@
+# Normalize text to LF in the repo; let Git handle checkout conversion.
+* text=auto eol=lf
+
+# Binary assets — never touch line endings.
+*.exe   binary
+*.dll   binary
+*.syso  binary
+*.ico   binary
+*.zip   binary

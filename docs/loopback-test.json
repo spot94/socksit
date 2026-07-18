@@ -1,0 +1,10 @@
+{
+  "log": { "level": "warn" },
+  "dns": { "servers": [ { "type": "local", "tag": "local" } ] },
+  "inbounds": [ { "type": "mixed", "tag": "in", "listen": "127.0.0.1", "listen_port": 18080 } ],
+  "outbounds": [
+    { "type": "socks", "tag": "proxy", "server": "192.0.2.10", "server_port": 1080, "version": "5" },
+    { "type": "direct", "tag": "direct" }
+  ],
+  "route": { "default_domain_resolver": { "server": "local" }, "final": "proxy" }
+}

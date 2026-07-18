@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SocksIt installer (WiX v4/v5/v6 schema). Build with build/build-msi.ps1,
+     which stages the binaries and passes -d StageDir=... See plan U11/KTD9.
+     Registers the LocalSystem service and bundles the sing-box engine (Wintun is
+     self-provided by sing-box.exe). The tray needs no autostart entry: the
+     running service launches and maintains it in the interactive session (see
+     internal/service/traykeeper_windows.go). -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="SocksIt"
+           Manufacturer="SocksIt"
+           Version="0.1.0.0"
+           UpgradeCode="7C4B2E9A-3F1D-4E88-9A2C-1B6D5E0F7A31"
+           Scope="perMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of SocksIt is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="SocksIt">
+
+        <!-- socksit.exe + the LocalSystem service (runs `socksit.exe service`). -->
+        <Component Id="MainExe" Bitness="always64">
+          <File Id="socksit_exe" Source="$(var.StageDir)\socksit.exe" KeyPath="yes" />
+          <ServiceInstall Id="SvcInstall"
+                          Name="SocksIt"
+                          DisplayName="SocksIt per-app SOCKS5 proxifier"
+                          Type="ownProcess"
+                          Start="auto"
+                          ErrorControl="normal"
+                          Account="LocalSystem"
+                          Arguments="service" />
+          <ServiceControl Id="SvcControl"
+                          Name="SocksIt"
+                          Start="install"
+                          Stop="both"
+                          Remove="uninstall"
+                          Wait="yes" />
+        </Component>
+
+        <!-- Bundled engine (untouched official binary). -->
+        <Component Id="Engine" Bitness="always64">
+          <File Id="singbox_exe" Source="$(var.StageDir)\sing-box.exe" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="SocksIt">
+      <ComponentRef Id="MainExe" />
+      <ComponentRef Id="Engine" />
+    </Feature>
+  </Package>
+</Wix>

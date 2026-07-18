@@ -1,0 +1,389 @@
+# ============================================================================
+# Requirements Baseline Manifest
+# ----------------------------------------------------------------------------
+# Источник истины для обязательных требований к ИИ-проектам компании.
+#
+# Роли:
+#   Скилл инициализации (ai-project-baseline): рендерит из этого манифеста
+#       CLAUDE.md (только пункты с render_to_claude_md: true). Вопросов не
+#       задаёт; условные пункты оставляет со status: open.
+#   Скилл ce-brainstorm (отдельный): читает манифест, резолвит applies_when под
+#       конкретный проект, проставляет status и раскладывает пункты по фазам.
+#
+# Пол неснижаемый: пункт можно пометить na ТОЛЬКО с записанной причиной (решение
+# человека, не агента). Молчаливый пропуск запрещён.
+#
+# --- Легенда (документация; не данные) --------------------------------------
+# priority:
+#   O                    обязательно (единственный уровень в этом манифесте)
+# applies_when           — условие применимости; резолвит скилл ce-brainstorm:
+#   always               любой ИИ-проект — ядро, всегда идёт в CLAUDE.md
+#   deployable_service   проект, который где-то запускается/деплоится — идёт в CLAUDE.md
+#   local_auth           используется локальная авторизация
+#   has_admin            есть административные функции
+#   long_running         постоянно работающий сервис (а не разовая задача/скрипт)
+#   has_end_users        есть интерактивные конечные пользователи
+#   web                  есть веб-доступ
+#   optional             поддерживаемая опция, НЕ требование
+#   out_of_scope         решается вне проекта (инфраструктура/оргсредства)
+# render_to_claude_md    попадает ли в постоянный CLAUDE.md при инициализации
+#                        (правило рендера: always → секция «Ядро»; иначе → «Для сервиса»)
+# claude_line            концентрированная агентская формулировка для CLAUDE.md
+# phase:                 когда требование должно быть удовлетворено:
+#   scaffold             на этапе каркаса
+#   pre_feature          до выката соответствующей функциональности
+#   pre_prod             предпродакшн-гейт
+# status                 open (по умолчанию) → applicable | na | scheduled
+# resolution             причина/пояснение к status (обязательно для na/scheduled)
+# ----------------------------------------------------------------------------
+#
+# --- Project resolution: SocksIt (owner decision, 2026-07-13) ----------------
+# SocksIt классифицирован как ЛОКАЛЬНЫЙ ОДНОПОЛЬЗОВАТЕЛЬСКИЙ Windows desktop-сервис
+# без multi-user/удалённого доступа и без передачи данных в LLM. Решение владельца
+# продукта зафиксировано в docs/plans/2026-07-13-001-feat-socksit-per-app-socks5-plan.md
+# (раздел Corporate Floor Decisions). Статусы ниже проставлены согласно этому решению;
+# na/scheduled сопровождены resolution. Пол не понижен агентом самовольно — записано
+# утверждённое человеком решение и его прямые следствия для однопользовательского
+# desktop-инструмента.
+# ----------------------------------------------------------------------------
+
+version: "0.1.0"
+schema: 1
+
+applies_when_vocab:
+  - always
+  - deployable_service
+  - local_auth
+  - has_admin
+  - long_running
+  - has_end_users
+  - web
+  - optional
+  - out_of_scope
+
+requirements:
+
+  # ---- §1 Аутентификация и авторизация -------------------------------------
+
+  - id: AUTH-1
+    title: Bootstrap локального администратора
+    priority: O
+    applies_when: deployable_service
+    render_to_claude_md: true
+    claude_line: >-
+      На первом запуске/деплое есть локальный администратор: предпочтительно через first-run
+      в веб-панели, либо автосоздание при первом старте. Одного локального админа достаточно.
+    phase: scaffold
+    acceptance: >
+      На первом запуске/деплое существует локальный администратор. Предпочтительно —
+      создаётся через first-run в веб-панели (дружелюбнее к пользователю); допустимо
+      автосоздание при первом старте. Одного локального админа достаточно для работы сервиса.
+    status: na
+    resolution: >
+      Локальный однопользовательский инструмент: нет multi-user/удалённого доступа, нет
+      понятия «администратор сервиса». Управляет залогиненный владелец ПК. См. план 2026-07-13-001.
+
+  - id: AUTH-2
+    title: Принцип наименьших привилегий
+    priority: O
+    applies_when: always
+    render_to_claude_md: true
+    claude_line: "Deny-by-default. Каждая роль/токен — минимум прав. Роль admin существует всегда (см. AUTH-1)."
+    phase: scaffold
+    acceptance: >
+      Доступ по умолчанию запрещён (deny-by-default). Каждая роль/токен получает минимум
+      прав, необходимых для задачи. Роль admin существует всегда (см. AUTH-1).
+    status: applicable
+    resolution: >
+      Сервис LocalSystem только для TUN/маршрутов; control-API/pipe только loopback с
+      SDDL deny-by-default; маршрутизация allowlist = deny-by-default (KTD5, U8).
+
+  - id: AUTH-3
+    title: Безопасная локальная авторизация
+    priority: O
+    applies_when: deployable_service
+    render_to_claude_md: true
+    claude_line: >-
+      Политика паролей; защита от перебора; корректные сессии (HttpOnly+Secure cookie,
+      таймаут неактивности, работающий выход).
+    phase: pre_feature
+    acceptance: >
+      Политика паролей (сложность/срок); защита от перебора (лимит попыток/блокировка);
+      корректное управление сессиями (HttpOnly+Secure cookie, таймаут неактивности, работающий выход).
+    status: na
+    resolution: >
+      В продукте нет сетевой авторизации, сессий и паролей пользователя. Доступ к
+      управлению ограничен ядром через SDDL named pipe (U8).
+
+  - id: AUTH-ROLES
+    title: Роли сверх admin
+    priority: O
+    applies_when: has_end_users
+    render_to_claude_md: false
+    phase: pre_feature
+    acceptance: >
+      При наличии интерактивных пользователей вводятся дополнительные роли (например, user)
+      сверх admin, с разграничением прав.
+    status: na
+    resolution: >
+      Единственный актор — локальный пользователь (владелец ПК). Ролей и разграничения прав нет.
+
+  - id: AUTH-LDAP
+    title: Вход/роли через LDAP/AD (опция)
+    priority: O
+    applies_when: optional
+    render_to_claude_md: false
+    phase: pre_feature
+    acceptance: >
+      Поддержка LDAP/AD не входит в обязательный пол. Это опция, которую локальный
+      администратор включает и настраивает в админ-панели в рантайме.
+    status: na
+    resolution: Опция; для однопользовательского локального инструмента не используется.
+
+  # ---- §2 Администрирование ------------------------------------------------
+
+  - id: ADM-1
+    title: Административное управление только для админов
+    priority: O
+    applies_when: deployable_service
+    render_to_claude_md: true
+    claude_line: >-
+      Админ-функции только для роли admin. Ожидаемая форма — веб-админ-панель (в ней first-run
+      и опциональная настройка LDAP). Для headless — задокументированный админ-интерфейс.
+    phase: pre_feature
+    acceptance: >
+      Админ-функции доступны только роли admin. Ожидаемая форма — веб-админ-панель
+      (в ней first-run создание первого админа и опциональная настройка LDAP). Для
+      headless-проектов допустим задокументированный административный интерфейс.
+    status: na
+    resolution: >
+      Нет ролей и админ-панели. Управление — локальный трей/GUI пользователя через
+      защищённый pipe; интерфейс задокументирован (DOC-4).
+
+  # ---- §3 Безопасность -----------------------------------------------------
+
+  - id: SEC-1
+    title: Безопасное хранение секретов
+    priority: O
+    applies_when: always
+    render_to_claude_md: true
+    claude_line: >-
+      Никаких секретов в git и в собранных образах. Хранение по умолчанию — переменные
+      GitLab CI; допустимы Vault / docker secrets.
+    phase: scaffold
+    enforce_pretooluse_hook: recommended
+    acceptance: >
+      Секретов нет в git и в собранных образах. Дефолт хранения — переменные GitLab CI;
+      альтернативы (Vault, docker secrets) допустимы.
+    status: applicable
+    resolution: >
+      Креды SOCKS5 шифруются DPAPI at-rest (U7), не попадают в git (.gitignore); CI-секреты
+      подписи — переменные GitLab CI, когда репозиторий будет заведён.
+
+  - id: SEC-3
+    title: Аудит-лог действий администратора
+    priority: O
+    applies_when: has_admin
+    render_to_claude_md: true
+    claude_line: >-
+      Аудит-лог покрывает ВСЕ операции администратора. Человекочитаемый: кто → что сделал →
+      над каким объектом. Объекты по наименованию (id — в скобках), не голым id.
+    phase: pre_feature
+    acceptance: >
+      Аудит-лог существует и покрывает ВСЕ операции администратора. Человекочитаемый:
+      каждая запись показывает кто → что сделал → над каким объектом. Объекты указываются
+      по наименованию (id допустим в скобках), а не голым id.
+    status: applicable
+    resolution: >
+      Адаптировано под локальный инструмент: человекочитаемый лог действий пользователя
+      (изменение конфига, переключение режимов, старт/стоп) — internal/audit + U8, без утечки секретов.
+
+  - id: SEC-2
+    title: Домен и TLS
+    priority: O
+    applies_when: out_of_scope
+    render_to_claude_md: false
+    phase: pre_prod
+    acceptance: >
+      Вне периметра проекта. В разработке доступ по HTTP / IP / любому порту. Домен и TLS
+      навешиваются позже на уровне прокси и необязательны. Агент НЕ добавляет HTTPS-редиректы в дев-сборку.
+    status: na
+    resolution: Desktop-инструмент без веб-доступа; домен/TLS неприменимы.
+
+  - id: SEC-4
+    title: Скан уязвимостей образов и зависимостей
+    priority: O
+    applies_when: optional
+    render_to_claude_md: false
+    phase: pre_prod
+    acceptance: >
+      Не входит в агентский пол (инструкция «сканируй уязвимости» для агента размыта).
+      Вносится готовым шаблоном пайплайна на стороне GitLab CI.
+    status: scheduled
+    resolution: Вносится шаблоном GitLab CI после заведения репозитория (см. CICD-2).
+
+  # ---- §4 Работа с данными и ИИ --------------------------------------------
+
+  - id: DATA-1
+    title: Классификация данных
+    priority: O
+    applies_when: always
+    render_to_claude_md: true
+    claude_line: >-
+      До передачи любых данных в модель зафиксируй, что передавать допустимо. ПДн и
+      коммерческую тайну без правовых оснований в модель не передавать.
+    phase: scaffold
+    acceptance: >
+      До передачи любых данных в модель зафиксировано, какие данные допустимо передавать.
+      Передача ПДн и коммерческой тайны без правовых оснований запрещена. Это решение, а не код.
+    status: na
+    resolution: >
+      Продукт — сетевое ПО и не передаёт никакие данные ни в какую модель/LLM. Классифицировать нечего.
+
+  - id: DATA-2
+    title: Политика по моделям и границе периметра
+    priority: O
+    applies_when: always
+    render_to_claude_md: true
+    claude_line: >-
+      Зафиксируй разрешённые провайдеры/эндпоинты, границу периметра (внешний API vs on-prem)
+      и какие данные покидают контур.
+    phase: scaffold
+    acceptance: >
+      Зафиксированы разрешённые провайдеры/эндпоинты, граница периметра (внешний API vs on-prem)
+      и какие данные покидают контур компании.
+    status: na
+    resolution: Нет LLM-провайдеров/эндпоинтов в продукте.
+
+  # ---- §5 Контейнеризация и развёртывание ----------------------------------
+
+  - id: DEPL-1
+    title: Контейнеризация
+    priority: O
+    applies_when: deployable_service
+    render_to_claude_md: true
+    claude_line: "По умолчанию Docker + docker compose; иные средства изоляции — по обоснованию."
+    phase: scaffold
+    acceptance: >
+      Проект контейнеризирован. Дефолт — Docker + docker compose; допустимы иные средства
+      контейнеризации/изоляции при обосновании.
+    status: na
+    resolution: >
+      Обоснование: нативный Windows-сервис с TUN-адаптером (Wintun, SYSTEM-only) не
+      контейнеризуется в Docker. Средство изоляции — Windows Service + подписанный инсталлятор (KTD5/U11).
+
+  - id: DEPL-2
+    title: Health-check контейнеров
+    priority: O
+    applies_when: long_running
+    render_to_claude_md: false
+    phase: pre_prod
+    acceptance: >
+      У постоянно работающих сервисов настроен health-check; нездоровый контейнер
+      детектируется и перезапускается.
+    status: na
+    resolution: >
+      Не контейнерный сервис. Эквивалент здоровья обеспечивает супервайзор: Job Object +
+      авто-рестарт при краше + self-heal при смене сети (U4/U6).
+
+  - id: DEPL-3
+    title: Разделение окружений dev/test/prod
+    priority: O
+    applies_when: deployable_service
+    render_to_claude_md: true
+    claude_line: "Три независимых окружения dev/test/prod с раздельными конфигами; секреты и адреса не пересекаются."
+    phase: scaffold
+    acceptance: >
+      Три независимых окружения с раздельными конфигурациями; секреты и адреса не пересекаются.
+    status: na
+    resolution: >
+      Нет серверных окружений (desktop-инструмент). Вместо dev/test/prod — dev/release-каналы
+      сборки (неподписанная dev-сборка vs подписанный релиз).
+
+  # ---- §6 Управление кодом и CI/CD -----------------------------------------
+
+  - id: CICD-1
+    title: Код хранится в GitLab
+    priority: O
+    applies_when: always
+    render_to_claude_md: true
+    claude_line: "Репозиторий в GitLab, доступ по ролям."
+    phase: scaffold
+    acceptance: Репозиторий заведён в GitLab, доступ выдан по ролям.
+    status: scheduled
+    resolution: >
+      Отложено: первый проход ведётся локально (решение владельца 2026-07-13, local-first).
+      Репозиторий GitLab заводится позже; требование остаётся обязательным, не N/A.
+
+  - id: CICD-2
+    title: Настроенный CI/CD
+    priority: O
+    applies_when: deployable_service
+    render_to_claude_md: true
+    claude_line: "Пайплайн собирает артефакт и разворачивает его в целевую среду."
+    phase: scaffold
+    acceptance: >
+      Пайплайн собирает артефакт (build) и разворачивает его (deploy) в целевую среду.
+      Для не-развёртываемых проектов достаточно build/тестовой стадии.
+    status: scheduled
+    resolution: >
+      Отложено вместе с репозиторием (local-first). Локально уже собирается артефакт
+      (bin/socksit.exe) и проходят тесты; пайплайн сборки+подписи добавляется после GitLab.
+
+  - id: CICD-3
+    title: Ветвление, code review, защита основной ветки
+    priority: O
+    applies_when: always
+    render_to_claude_md: true
+    claude_line: >-
+      Merge в основную ветку только через MR с обязательным ревью; прямой push в основную
+      ветку запрещён.
+    phase: scaffold
+    acceptance: >
+      Merge в основную ветку только через MR с обязательным ревью; прямой push в основную
+      ветку запрещён.
+    status: scheduled
+    resolution: Отложено; вступает в силу после заведения репозитория GitLab (local-first).
+
+  # ---- §7 Документация -----------------------------------------------------
+
+  - id: DOC-1
+    title: Описание проекта
+    priority: O
+    applies_when: always
+    render_to_claude_md: true
+    claude_line: >-
+      Краткое + полное описание: архитектура, схема потоков данных, какие данные
+      обрабатываются (потоки данных — ссылкой на DATA-1/DATA-2, без дублирования).
+    phase: pre_prod
+    acceptance: >
+      Есть краткое и полное описание: архитектура, схема потоков данных, какие данные
+      обрабатываются. Часть про потоки данных связана с DATA-1/DATA-2 — ссылаться, не дублировать.
+    status: applicable
+    resolution: docs/README.md (описание + архитектура); потоки данных — ссылки на план.
+
+  - id: DOC-3
+    title: Установка и развёртывание
+    priority: O
+    applies_when: deployable_service
+    render_to_claude_md: true
+    claude_line: "Установка, деплой и first-run (как создаётся первый локальный админ, см. AUTH-1)."
+    phase: pre_prod
+    acceptance: >
+      Инструкция по установке, развёртыванию и first-run — как создаётся первый локальный
+      администратор (см. AUTH-1).
+    status: applicable
+    resolution: docs/install.md (установка сервиса + first-run: генерация дефолтного конфига).
+
+  - id: DOC-4
+    title: Руководство по использованию
+    priority: O
+    applies_when: deployable_service
+    render_to_claude_md: true
+    claude_line: "Как пользоваться сервисом с акцентом на UI; вставки про API где уместно; конкретные примеры."
+    phase: pre_prod
+    acceptance: >
+      Как пользоваться сервисом с акцентом на работу через UI; вставки про API там, где
+      уместно; конкретные примеры.
+    status: applicable
+    resolution: docs/usage.md (акцент на трей/GUI и YAML-конфиг; примеры).

@@ -1,0 +1,39 @@
+# SocksIt configuration (example). Copy to %ProgramData%\SocksIt\socksit.yaml.
+# See docs/plans/2026-07-13-001-feat-socksit-per-app-socks5-plan.md for meaning.
+
+proxy:
+  address: 10.0.0.1     # SOCKS5 server (IP or host) — put yours here
+  port: 1080
+  username: ""          # leave empty for no-auth
+  password: ""
+  udp: true             # UDP ASSOCIATE (falls back to no-UDP if server lacks it)
+
+# Which apps to route. Bare name matches by process name; a path matches exactly.
+apps:
+  - chrome.exe
+  - Telegram.exe
+  # - C:\Games\game.exe
+
+# Destination subnets that always go DIRECT (bypass the proxy), even for proxied
+# apps. Private ranges are already direct; list arbitrary ones here (esp. greedy).
+direct_subnets:
+  - 192.168.1.0/24
+  # - 172.16.0.0/16
+
+mode: allowlist         # allowlist = only these apps proxied; blocklist = all except these
+kill_switch: true       # true = block proxied apps while tunnel is down; false = fail-open
+show_tray: true         # true = keep a tray icon while the service is installed; false = no tray
+
+dns:
+  fakeip_v4: 198.18.0.0/15   # IPv4-only datapath (v6 stays native)
+
+control:
+  clash_api: 127.0.0.1:9797   # loopback only; used by the stats window
+
+update:
+  endpoint: ""                # release base URL; empty = updates disabled (safe default)
+                              # GitHub: https://github.com/<owner>/<repo>/releases/latest/download
+  channel: stable             # stable | beta
+  mode: notify                # off | notify | auto
+  check_interval: 24h         # min 1h
+  proxy: ""                   # "" direct | system | use-socks | socks5://host:port | http://host:port
