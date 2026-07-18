@@ -25,6 +25,10 @@ const detachedFlags = 0x00000008 | 0x00000200
 type applyResult struct {
 	OK      bool   `json:"ok"`
 	Message string `json:"message"`
+	// Applied is true only when a new binary was actually swapped in and the
+	// restart helper spawned (not for "already up to date"). The panel uses it to
+	// decide whether to relaunch itself into the new binary.
+	Applied bool `json:"applied"`
 }
 
 // UpdateApply downloads the newer signed release, swaps in the new socksit.exe,
@@ -33,7 +37,7 @@ type applyResult struct {
 func (r *Runtime) UpdateApply() (any, error) {
 	res, err := r.applyUpdate()
 	if err != nil {
-		return applyResult{false, err.Error()}, nil
+		return applyResult{OK: false, Message: err.Error()}, nil
 	}
 	return res, nil
 }
@@ -52,7 +56,7 @@ func (r *Runtime) applyUpdate() (applyResult, error) {
 		return applyResult{}, err
 	}
 	if !updates.Newer(m.Version, r.Version) {
-		return applyResult{true, "already up to date (" + r.Version + ")"}, nil
+		return applyResult{OK: true, Message: "already up to date (" + r.Version + ")"}, nil
 	}
 	if m.App.URL == "" || m.App.SHA256 == "" {
 		return applyResult{}, errors.New("the manifest has no app artifact to download")
@@ -87,7 +91,7 @@ func (r *Runtime) applyUpdate() (applyResult, error) {
 		_ = os.Rename(oldPath, target)
 		return applyResult{}, fmt.Errorf("start the restart helper: %w", err)
 	}
-	return applyResult{true, "Update " + m.Version + " downloaded — the service will restart to apply it."}, nil
+	return applyResult{OK: true, Applied: true, Message: "Update " + m.Version + " downloaded — the service will restart to apply it."}, nil
 }
 
 // RunUpdateRestart is the detached helper: it stops the service, starts the new

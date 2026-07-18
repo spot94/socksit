@@ -139,6 +139,7 @@ func (a *app) bind() {
 	_ = a.w.Bind("appSetLang", a.setLang)
 	_ = a.w.Bind("appSetDark", func(dark bool) { applyDarkTitleBar(uintptr(a.w.Window()), dark) })
 	_ = a.w.Bind("appElevate", a.elevate)
+	_ = a.w.Bind("appRestartForUpdate", a.restartForUpdate)
 	_ = a.w.Bind("appGetUpdate", a.getUpdate)
 	_ = a.w.Bind("appSaveUpdate", a.saveUpdate)
 	_ = a.w.Bind("appUpdateStatus", a.updateStatus)
@@ -488,6 +489,30 @@ func (a *app) elevate() result {
 		return result{false, err.Error()}
 	}
 	a.w.Terminate() // hand off to the elevated instance
+	return result{true, ""}
+}
+
+// restartForUpdate relaunches the freshly-installed binary and closes this panel.
+// After an in-place update the running panel is still the OLD exe; the new one
+// sits at InstallDir()\socksit.exe, so we launch that and exit. The singleton is
+// released first so the new instance claims it instead of just focusing this
+// dying window.
+func (a *app) restartForUpdate() result {
+	target := filepath.Join(service.InstallDir(), "socksit.exe")
+	if _, err := os.Stat(target); err != nil {
+		target = executablePath() // fall back to our own path
+	}
+	if panelMutex != 0 {
+		windows.CloseHandle(panelMutex)
+		panelMutex = 0
+	}
+	verb, _ := windows.UTF16PtrFromString("open")
+	file, _ := windows.UTF16PtrFromString(target)
+	if err := windows.ShellExecute(0, verb, file, nil, nil, windows.SW_SHOWNORMAL); err != nil {
+		acquireSingleton() // launch failed; keep holding the singleton and stay open
+		return result{false, err.Error()}
+	}
+	a.w.Terminate() // hand off to the new instance
 	return result{true, ""}
 }
 
