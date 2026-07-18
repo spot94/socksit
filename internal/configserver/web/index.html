@@ -58,18 +58,16 @@
   .authbox h1{margin-bottom:4px} .authbox .sub{color:var(--muted);margin-bottom:14px;text-align:center}
   .snippet{background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:10px;white-space:pre;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
   .pill{font-size:11px;font-weight:500;padding:3px 9px;border-radius:999px;background:var(--panel-2);border:1px solid var(--border);color:var(--muted)}
-  .topctl{position:fixed;top:12px;right:14px;display:flex;gap:8px;z-index:50}
-  .topctl .mini{padding:5px 8px;font-size:12px;border-radius:8px;color:var(--muted)}
-  .topctl .mini:hover{color:var(--text)}
+  .mini{padding:5px 8px;font-size:12px;border-radius:8px;color:var(--muted)}
+  .mini:hover{color:var(--text)}
+  .side .foot .ctlrow{display:flex;gap:8px;margin-bottom:10px}
+  .plist a.add{color:var(--accent);font-weight:500;display:flex;align-items:center;gap:7px;margin-top:2px}
+  .plist a.add:hover{background:var(--accent-weak)}
+  .plist a.add .plus{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1px solid var(--accent);font-size:13px;line-height:1;flex:0 0 auto}
 </style>
 <script>try{var _t=localStorage.getItem('cs.theme');if(_t==='dark'||_t==='light')document.documentElement.setAttribute('data-theme',_t);}catch(e){}</script>
 </head>
 <body>
-
-<div class="topctl">
-  <select id="langSel" class="mini" data-i18n-title="ctl.lang"><option value="en">EN</option><option value="ru">RU</option></select>
-  <button id="themeBtn" class="mini" data-i18n-title="ctl.theme">◐</button>
-</div>
 
 <div id="screen-auth" class="center" style="display:none">
   <div class="authbox">
@@ -90,11 +88,17 @@
       <a data-sec="key" data-i18n="nav.key">Signing key</a>
       <a data-sec="audit" data-i18n="nav.audit">Audit log</a>
     </nav>
-    <div class="foot"><button id="btnLogout" style="width:100%" data-i18n="btn.logout">Log out</button></div>
+    <div class="foot">
+      <div class="ctlrow">
+        <select id="langSel" class="mini" data-i18n-title="ctl.lang" style="flex:1"><option value="en">EN</option><option value="ru">RU</option></select>
+        <button id="themeBtn" class="mini" data-i18n-title="ctl.theme">◐</button>
+      </div>
+      <button id="btnLogout" style="width:100%" data-i18n="btn.logout">Log out</button>
+    </div>
   </aside>
   <main class="main">
     <section class="section active" id="sec-profiles">
-      <div class="head"><h1 data-i18n="nav.profiles">Profiles</h1><button id="btnNewProfile" data-i18n="btn.newProfile">New profile</button></div>
+      <div class="head"><h1 data-i18n="nav.profiles">Profiles</h1></div>
       <div class="row" style="align-items:flex-start;gap:16px">
         <div class="card" style="width:200px;flex:0 0 auto"><h3 data-i18n="nav.profiles">Profiles</h3><div class="plist" id="plist"></div></div>
         <div class="card" style="flex:1;min-width:320px;display:none" id="editorCard">
@@ -307,8 +311,13 @@ let current = null, pubKey = '';
 async function loadProfiles(){
   const {profiles} = await api('/api/profiles');
   const box = $('#plist'); box.innerHTML='';
-  if(!profiles || !profiles.length){ box.innerHTML='<div class="muted" style="padding:8px">'+esc(t('msg.noProfiles'))+'</div>'; }
+  if(!profiles || !profiles.length){ const m=document.createElement('div'); m.className='muted'; m.style.padding='8px'; m.textContent=t('msg.noProfiles'); box.appendChild(m); }
   (profiles||[]).forEach(n=>{ const a=document.createElement('a'); a.textContent=n; if(n===current) a.classList.add('active'); a.onclick=()=>selectProfile(n); box.appendChild(a); });
+  // "New profile" is always the last entry in the list.
+  const add=document.createElement('a'); add.className='add';
+  add.innerHTML='<span class="plus">+</span><span data-i18n="btn.newProfile"></span>';
+  add.querySelector('[data-i18n]').textContent=t('btn.newProfile');
+  add.onclick=newProfile; box.appendChild(add);
 }
 async function selectProfile(name){
   current = name;
@@ -340,7 +349,7 @@ $('#btnDeleteProfile').onclick = async () => {
   try{ await api('/api/profiles/'+encodeURIComponent(current),'DELETE'); current=null; show($('#editorCard'),false); loadProfiles(); }
   catch(e){ banner($('#editBanner'),'err', e.message); }
 };
-$('#btnNewProfile').onclick = async () => {
+async function newProfile(){
   const name = (prompt(t('prompt.profileName'))||'').trim();
   if(!name) return;
   if(!/^[a-z0-9][a-z0-9-]{0,39}$/.test(name)){ alert(t('alert.invalidName')); return; }
