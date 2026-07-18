@@ -47,6 +47,7 @@ type Runtime struct {
 	restartCh  chan struct{}
 	log        io.Writer
 	lastUpdate atomic.Pointer[updates.Result]
+	lastConfig atomic.Pointer[configFetchResult]
 }
 
 func (r *Runtime) configPath() string { return filepath.Join(r.DataDir, "socksit.yaml") }
@@ -118,6 +119,9 @@ func (r *Runtime) Run(ctx context.Context) error {
 
 	// Periodic update checks (notify-only; see update_windows.go).
 	go r.superviseUpdates(ctx)
+
+	// Managed-config feed: fetch on start + on interval (see configsource_windows.go).
+	go r.superviseConfigSource(ctx)
 
 	return r.superviseLoop(ctx)
 }

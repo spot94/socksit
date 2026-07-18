@@ -20,6 +20,8 @@ const (
 	OpUpdateStatus = "update_status"
 	OpUpdateCheck  = "update_check"
 	OpUpdateApply  = "update_apply"
+	OpConfigStatus = "config_status"
+	OpConfigFetch  = "config_fetch"
 )
 
 // Request is a single control call. Args carries operation parameters; it is
@@ -49,4 +51,6 @@ type Handler interface {
 	UpdateStatus() (any, error)
 	UpdateCheck() (any, error)
 	UpdateApply() (any, error)
+	ConfigStatus() (any, error)
+	ConfigFetch() (any, error)
 }

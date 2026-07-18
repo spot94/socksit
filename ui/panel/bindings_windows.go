@@ -68,6 +68,9 @@ type configView struct {
 	UDP           bool     `json:"udp"`
 	DirectSubnets []string `json:"directSubnets"`
 	Apps          []string `json:"apps"`
+	CfgURL        string   `json:"cfgUrl"`
+	CfgInterval   string   `json:"cfgInterval"`
+	CfgSigned     bool     `json:"cfgSigned"`
 }
 
 type saveInput struct {
@@ -81,6 +84,9 @@ type saveInput struct {
 	UDP           bool     `json:"udp"`
 	DirectSubnets []string `json:"directSubnets"`
 	Apps          []string `json:"apps"`
+	CfgURL        string   `json:"cfgUrl"`
+	CfgInterval   string   `json:"cfgInterval"`
+	CfgSigned     bool     `json:"cfgSigned"`
 }
 
 type result struct {
@@ -138,6 +144,29 @@ func (a *app) bind() {
 	_ = a.w.Bind("startStats", a.startStats)
 	_ = a.w.Bind("startUpdateCheck", a.startUpdateCheck)
 	_ = a.w.Bind("startUpdateApply", a.startUpdateApply)
+	_ = a.w.Bind("appConfigStatus", a.configStatus)
+	_ = a.w.Bind("startConfigFetch", a.startConfigFetch)
+}
+
+// configStatus returns the managed-config feed status (raw JSON).
+func (a *app) configStatus() json.RawMessage {
+	if resp, err := ipc.Call(a.pipe, ipc.Request{Op: ipc.OpConfigStatus}, callTimeout); err == nil && resp.OK {
+		return json.RawMessage(resp.Data)
+	}
+	b, _ := json.Marshal(map[string]any{"managed": false})
+	return json.RawMessage(b)
+}
+
+// startConfigFetch pulls the managed config now (network, off the UI thread).
+func (a *app) startConfigFetch(id string) {
+	go func() {
+		resp, err := ipc.Call(a.pipe, ipc.Request{Op: ipc.OpConfigFetch}, 40*time.Second)
+		if err != nil || !resp.OK {
+			a.resolve(id, map[string]any{"error": a.tr("the service is not reachable", "служба недоступна")})
+			return
+		}
+		a.resolve(id, json.RawMessage(resp.Data))
+	}()
 }
 
 type updateView struct {
@@ -285,6 +314,9 @@ func (a *app) getConfig() configView {
 		UDP:           c.UDPEnabled(),
 		DirectSubnets: nonNil(c.DirectSubnets),
 		Apps:          nonNil(c.Apps),
+		CfgURL:        c.ConfigSource.URL,
+		CfgInterval:   c.ConfigSource.Interval,
+		CfgSigned:     c.ConfigSigned(),
 	}
 }
 
@@ -306,6 +338,12 @@ func (a *app) saveConfig(in saveInput) result {
 	c.ShowTray = &tray
 	c.DirectSubnets = cleanList(in.DirectSubnets)
 	c.Apps = cleanList(in.Apps)
+	c.ConfigSource.URL = strings.TrimSpace(in.CfgURL)
+	if strings.TrimSpace(in.CfgInterval) != "" {
+		c.ConfigSource.Interval = strings.TrimSpace(in.CfgInterval)
+	}
+	cs := in.CfgSigned
+	c.ConfigSource.Signed = &cs
 
 	b, err := yaml.Marshal(c)
 	if err != nil {

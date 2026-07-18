@@ -38,9 +38,40 @@ func main() {
 		genkey()
 	case "build":
 		build(os.Args[2:])
+	case "sign-config":
+		signConfig(os.Args[2:])
 	default:
 		fail("unknown subcommand %q", os.Args[1])
 	}
+}
+
+// signConfig writes a detached Ed25519 signature for a managed-config YAML.
+func signConfig(args []string) {
+	fs := flag.NewFlagSet("sign-config", flag.ExitOnError)
+	in := fs.String("in", "", "path to the config YAML (required)")
+	out := fs.String("out", "", "output .sig path (default: <in>.sig)")
+	_ = fs.Parse(args)
+	if *in == "" {
+		fail("-in is required")
+	}
+	keyB64 := strings.TrimSpace(os.Getenv("SOCKSIT_SIGN_KEY"))
+	if keyB64 == "" {
+		fail("SOCKSIT_SIGN_KEY env is empty (base64 Ed25519 private key)")
+	}
+	privRaw, err := base64.StdEncoding.DecodeString(keyB64)
+	must(err)
+	if len(privRaw) != ed25519.PrivateKeySize {
+		fail("SOCKSIT_SIGN_KEY must decode to %d bytes", ed25519.PrivateKeySize)
+	}
+	body, err := os.ReadFile(*in)
+	must(err)
+	sig := ed25519.Sign(ed25519.PrivateKey(privRaw), body)
+	dst := *out
+	if dst == "" {
+		dst = *in + ".sig"
+	}
+	must(os.WriteFile(dst, []byte(base64.StdEncoding.EncodeToString(sig)+"\n"), 0o644))
+	fmt.Printf("signed %s -> %s\n", *in, dst)
 }
 
 func genkey() {

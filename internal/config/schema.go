@@ -43,6 +43,22 @@ type Config struct {
 	DNS      DNS     `yaml:"dns"`
 	Control  Control `yaml:"control"`
 	Update   Update  `yaml:"update"`
+	// ConfigSource optionally pulls this config from a URL (managed config). It is
+	// a client-local policy and is preserved across remote fetches (a fetched
+	// config cannot change it), so managed mode can't lock or unlock itself.
+	ConfigSource ConfigSource `yaml:"config_source"`
+}
+
+// ConfigSource describes an optional remote config feed. Because a remote config
+// decides where traffic goes (proxy address, apps, direct subnets), it is
+// signature-verified by default (Ed25519, same key as updates).
+type ConfigSource struct {
+	// URL of the config YAML; empty = use the local config (default).
+	URL string `yaml:"url"`
+	// Interval is a Go duration between refreshes (min 1m); also fetched on start.
+	Interval string `yaml:"interval"`
+	// Signed requires a matching <url>.sig; true (default) is strongly recommended.
+	Signed *bool `yaml:"signed"`
 }
 
 // Update modes.
@@ -103,6 +119,7 @@ func Default() *Config {
 	on := true
 	udp := true
 	tray := true
+	signed := true
 	return &Config{
 		Proxy:      Proxy{Port: 1080, UDP: &udp},
 		Apps:       []string{},
@@ -118,7 +135,26 @@ func Default() *Config {
 			CheckInterval: "24h",
 			Proxy:         "use-socks",
 		},
+		ConfigSource: ConfigSource{Interval: "1h", Signed: &signed},
 	}
+}
+
+// ConfigManaged reports whether the config is pulled from a remote URL.
+func (c *Config) ConfigManaged() bool { return strings.TrimSpace(c.ConfigSource.URL) != "" }
+
+// ConfigSigned reports the effective signature requirement (default true).
+func (c *Config) ConfigSigned() bool { return c.ConfigSource.Signed == nil || *c.ConfigSource.Signed }
+
+// ConfigEvery is the effective refresh interval (default 1h, min 1m).
+func (c *Config) ConfigEvery() time.Duration {
+	d, err := time.ParseDuration(c.ConfigSource.Interval)
+	if err != nil {
+		return time.Hour
+	}
+	if d < time.Minute {
+		return time.Minute
+	}
+	return d
 }
 
 // UpdatesEnabled reports whether periodic update checks should run.
@@ -179,6 +215,9 @@ func (c *Config) applyDefaults() {
 	if c.Update.CheckInterval == "" {
 		c.Update.CheckInterval = d.Update.CheckInterval
 	}
+	if c.ConfigSource.Interval == "" {
+		c.ConfigSource.Interval = d.ConfigSource.Interval
+	}
 }
 
 // Validate checks the config for coherence and returns the first problem found.
@@ -212,6 +251,15 @@ func (c *Config) Validate() error {
 	}
 	if err := c.validateUpdate(); err != nil {
 		return err
+	}
+	if _, err := time.ParseDuration(c.ConfigSource.Interval); err != nil {
+		return fmt.Errorf("config_source.interval: invalid duration %q: %w", c.ConfigSource.Interval, err)
+	}
+	if u := strings.TrimSpace(c.ConfigSource.URL); u != "" {
+		pu, err := url.Parse(u)
+		if err != nil || pu.Host == "" || (pu.Scheme != "http" && pu.Scheme != "https") {
+			return fmt.Errorf("config_source.url: must be an http(s) URL, got %q", u)
+		}
 	}
 	return nil
 }

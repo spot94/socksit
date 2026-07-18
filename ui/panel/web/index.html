@@ -214,6 +214,20 @@
         <div class="sub muted" style="margin-top:8px" data-i18n="hint.apps">Exact .exe name (any folder) or a full path. For web apps add the browser (chrome.exe / msedge.exe).</div>
       </div>
 
+      <div class="card" style="margin-top:14px">
+        <h3 data-i18n="cfg.title">Config source (optional)</h3>
+        <div class="form" style="margin-top:8px">
+          <label class="fld wide"><span data-i18n="cfg.url">Config URL</span><input type="text" id="cfgUrl" data-i18n-ph="cfg.urlPh"></label>
+          <label class="fld"><span data-i18n="cfg.interval">Refresh interval</span><input type="text" id="cfgInterval" placeholder="1h"></label>
+          <label class="switch" style="align-self:end;height:38px"><input type="checkbox" id="cfgSigned"><span class="track"></span><span data-i18n="cfg.signed">Require signature</span></label>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button id="btnCfgFetch" data-i18n="cfg.fetch">Fetch now</button>
+          <span class="muted" id="cfgStatus"></span>
+        </div>
+        <div class="sub muted" style="margin-top:8px" data-i18n="cfg.hint">When set, the config is pulled from this URL and applied automatically.</div>
+      </div>
+
       <div class="row" style="margin-top:14px">
         <button class="primary" id="btnSave" data-i18n="btn.save">Save &amp; apply</button>
         <button id="btnTest2" data-i18n="btn.test">Test proxy</button>
@@ -330,7 +344,8 @@ const I18N = {
     'upd.title':'Updates','upd.endpoint':'Update source (URL)','upd.endpointPh':'https://github.com/<owner>/<repo>/releases/latest/download',
     'upd.channel':'Channel','upd.mode':'Mode','upd.mode.off':'Off','upd.mode.notify':'Notify','upd.mode.auto':'Auto',
     'upd.interval':'Check interval','upd.proxy':'Proxy for checks','upd.proxyPh':'empty=direct · system · use-socks · socks5://host:port',
-    'upd.save':'Save','upd.check':'Check now','upd.apply':'Apply update','upd.applying':'Downloading and applying…','upd.upToDate':'Up to date (v{v})','upd.available':'Update available: v{v}','upd.checking':'Checking…','upd.hint':'Trust is verified by signature — the source/CDN is untrusted.'
+    'upd.save':'Save','upd.check':'Check now','upd.apply':'Apply update','upd.applying':'Downloading and applying…','upd.upToDate':'Up to date (v{v})','upd.available':'Update available: v{v}','upd.checking':'Checking…','upd.hint':'Trust is verified by signature — the source/CDN is untrusted.',
+    'cfg.title':'Config source (optional)','cfg.url':'Config URL','cfg.urlPh':'https://…/socksit.yaml — empty = local config','cfg.interval':'Refresh interval','cfg.signed':'Require signature','cfg.fetch':'Fetch now','cfg.fetching':'Fetching…','cfg.local':'Using the local config.','cfg.fetched':'Last fetched {t}','cfg.changed':' (updated)','cfg.hint':'When set, the config is pulled from this URL and applied automatically (on start and on the interval); local edits are overwritten on refresh. A signed feed (recommended) needs a matching <url>.sig, verified with the built-in key.'
   },
   ru: {
     'nav.dashboard':'Обзор','nav.settings':'Настройки','nav.statistics':'Статистика','nav.logs':'Логи','nav.diagnostics':'Диагностика','nav.about':'О программе',
@@ -362,7 +377,8 @@ const I18N = {
     'upd.title':'Обновления','upd.endpoint':'Источник обновлений (URL)','upd.endpointPh':'https://github.com/<owner>/<repo>/releases/latest/download',
     'upd.channel':'Канал','upd.mode':'Режим','upd.mode.off':'Выкл','upd.mode.notify':'Уведомлять','upd.mode.auto':'Авто',
     'upd.interval':'Интервал проверки','upd.proxy':'Прокси для проверок','upd.proxyPh':'пусто=напрямую · system · use-socks · socks5://host:port',
-    'upd.save':'Сохранить','upd.check':'Проверить сейчас','upd.apply':'Установить обновление','upd.applying':'Скачивание и установка…','upd.upToDate':'Актуальная версия (v{v})','upd.available':'Доступно обновление: v{v}','upd.checking':'Проверка…','upd.hint':'Подлинность проверяется подписью — источник/CDN недоверенный.'
+    'upd.save':'Сохранить','upd.check':'Проверить сейчас','upd.apply':'Установить обновление','upd.applying':'Скачивание и установка…','upd.upToDate':'Актуальная версия (v{v})','upd.available':'Доступно обновление: v{v}','upd.checking':'Проверка…','upd.hint':'Подлинность проверяется подписью — источник/CDN недоверенный.',
+    'cfg.title':'Источник конфига (опц.)','cfg.url':'URL конфига','cfg.urlPh':'https://…/socksit.yaml — пусто = локальный конфиг','cfg.interval':'Интервал обновления','cfg.signed':'Требовать подпись','cfg.fetch':'Обновить сейчас','cfg.fetching':'Обновление…','cfg.local':'Используется локальный конфиг.','cfg.fetched':'Обновлено {t}','cfg.changed':' (изменён)','cfg.hint':'Если задан — конфиг тянется по этому URL и применяется автоматически (при старте и по интервалу); локальные правки перезаписываются при обновлении. Для подписанного канала (рекомендуется) нужен <url>.sig, проверяемый вшитым ключом.'
   }
 };
 let lang = 'en';
@@ -383,6 +399,7 @@ function applyLang(l){
   renderApps();
   renderStats();
   renderUpdateStatus();
+  renderCfgStatus();
   if (!diagRan) document.getElementById('diagText').textContent = t('diag.placeholder');
 }
 
@@ -506,8 +523,26 @@ async function loadSettings(){
   document.getElementById('fUdp').checked = !!c.udp;
   document.getElementById('fTray').checked = !!c.showTray;
   apps = (c.apps||[]).slice(); renderApps();
+  g('cfgUrl').value = c.cfgUrl||'';
+  g('cfgInterval').value = c.cfgInterval||'1h';
+  g('cfgSigned').checked = (c.cfgSigned !== false);
   loadProcs();
+  loadCfgStatus();
 }
+let lastCfg = null;
+async function loadCfgStatus(){ try{ lastCfg = await call('appConfigStatus'); }catch(e){ lastCfg=null; } renderCfgStatus(); }
+function renderCfgStatus(){
+  const el = g('cfgStatus'); const r = lastCfg; if(!el) return;
+  if(!r){ el.textContent=''; return; }
+  if(r.error){ el.textContent = r.error; return; }
+  if(!r.managed){ el.textContent = t('cfg.local'); return; }
+  el.textContent = r.fetched ? (t('cfg.fetched',{t:r.fetched}) + (r.changed?t('cfg.changed'):'')) : '';
+}
+document.getElementById('btnCfgFetch').onclick = async ()=>{
+  g('cfgStatus').textContent = t('cfg.fetching');
+  lastCfg = await job('startConfigFetch'); renderCfgStatus();
+  refreshState();
+};
 async function loadProcs(){
   const names = await call('appProcesses'); const dl = document.getElementById('procList');
   dl.innerHTML = names.map(n=>'<option value="'+escapeHtml(n)+'">').join('');
@@ -522,7 +557,8 @@ function collect(){
     username:document.getElementById('fUser').value, password:document.getElementById('fPass').value,
     mode:document.getElementById('fMode').value, killSwitch:document.getElementById('fKill').checked,
     udp:document.getElementById('fUdp').checked, showTray:document.getElementById('fTray').checked,
-    directSubnets:subs, apps:apps.slice() };
+    directSubnets:subs, apps:apps.slice(),
+    cfgUrl:document.getElementById('cfgUrl').value.trim(), cfgInterval:document.getElementById('cfgInterval').value.trim()||'1h', cfgSigned:document.getElementById('cfgSigned').checked };
 }
 document.getElementById('btnSave').onclick = async ()=>{ const b=document.getElementById('setBanner'); banner(b,'info',t('msg.saving'));
   const r = await call('appSaveConfig', collect()); banner(b, r.ok?'ok':'err', r.message); refreshState(); };

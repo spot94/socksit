@@ -125,6 +125,24 @@ func Check(ctx context.Context, client *http.Client, endpoint, channel, current 
 // Newer reports whether version a is strictly newer than b.
 func Newer(a, b string) bool { return compareVersions(a, b) > 0 }
 
+// Verify checks a detached base64 Ed25519 signature over body against the baked
+// trusted keys (same keys as the update manifest). Used for the managed-config
+// feed. Returns an error if no key is compiled in or the signature is invalid.
+func Verify(body []byte, sigB64 string) error {
+	keys := trustedKeys()
+	if len(keys) == 0 {
+		return errors.New("no trusted key is compiled into this build")
+	}
+	sig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(sigB64))
+	if err != nil {
+		return fmt.Errorf("bad signature encoding: %w", err)
+	}
+	if !verify(keys, body, sig) {
+		return errors.New("signature is not valid")
+	}
+	return nil
+}
+
 // DownloadVerified downloads url and checks its SHA-256 against the (signed-
 // manifest) expected hex digest. The bytes are safe to execute only if err is nil.
 func DownloadVerified(ctx context.Context, client *http.Client, url, sha256hex string) ([]byte, error) {

@@ -99,6 +99,12 @@ func (s *Server) dispatch(req Request) Response {
 		resp := dataResp(s.h.UpdateApply())
 		s.audit("applied an update", "socksit.exe")
 		return resp
+	case OpConfigStatus:
+		return dataResp(s.h.ConfigStatus())
+	case OpConfigFetch:
+		resp := dataResp(s.h.ConfigFetch())
+		s.audit("fetched the managed config", "socksit.yaml")
+		return resp
 
 	case OpSetConfig:
 		if err := s.h.SetConfig(req.Args["yaml"]); err != nil {

@@ -37,3 +37,8 @@ update:
   mode: notify                # off | notify | auto
   check_interval: 24h         # min 1h
   proxy: use-socks            # "" direct | system | use-socks | socks5://host:port | http://host:port
+
+config_source:                # optional "managed config": pull this file from a URL
+  url: ""                     # empty = use this local file; e.g. https://host/socksit.yaml
+  interval: 1h                # refresh period (also fetched on service start), min 1m
+  signed: true                # require a matching <url>.sig (Ed25519, built-in key) — recommended

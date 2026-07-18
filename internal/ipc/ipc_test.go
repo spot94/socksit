@@ -35,6 +35,8 @@ func (h *fakeHandler) Stats() (any, error)        { return []string{}, nil }
 func (h *fakeHandler) UpdateStatus() (any, error) { return map[string]string{}, nil }
 func (h *fakeHandler) UpdateCheck() (any, error)  { return map[string]string{}, nil }
 func (h *fakeHandler) UpdateApply() (any, error)  { return map[string]string{}, nil }
+func (h *fakeHandler) ConfigStatus() (any, error) { return map[string]string{}, nil }
+func (h *fakeHandler) ConfigFetch() (any, error)  { return map[string]string{}, nil }
 
 type syncBuf struct {
 	mu sync.Mutex
