@@ -31,20 +31,35 @@ invalid config.
 
 ## Run (Docker)
 
-Build context is the repo root (the server shares `internal/config` with the
-client).
+By default the compose **pulls the image from GHCR**
+(`ghcr.io/spot94/socksit-configserver:latest`), built by
+`.github/workflows/configserver-image.yml` on every push to `main` (`:latest`) and
+on version tags (`:X.Y.Z`). GHCR packages start private — after the first push,
+make the package public (repo → Packages → Package settings → visibility) or run
+`docker login ghcr.io` on the host.
 
 ```bash
 cd deploy/configserver
 cp .env.example .env.dev          # set ADMIN_PASSWORD or leave empty for first-run
-docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev up -d --build
-# → http://127.0.0.1:8080
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev up -d
+# → http://127.0.0.1:8080  (pull_policy: always keeps :latest fresh)
 ```
 
 Production (behind a TLS reverse proxy on an external `edge` network):
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d --build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d
+```
+
+Pin a version with `CONFIGSERVER_IMAGE=ghcr.io/spot94/socksit-configserver:0.1.5`
+in the env file.
+
+To **build the image locally** instead of pulling (the build context is the repo
+root — the server shares `internal/config` with the client), add the build
+override and pass `--build`:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml -f docker-compose.dev.yml --env-file .env.dev up -d --build
 ```
 
 `dev` / `test` / `prod` each use their own env file, volume and password so they

@@ -1,13 +1,15 @@
-# Base compose for the SocksIt config server. Combine with an env-specific
-# override, e.g.:
+# Base compose for the SocksIt config server. By default it PULLS the image from
+# GitHub Container Registry (built by .github/workflows/configserver-image.yml).
+# Combine with an env-specific override, e.g.:
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev up -d
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d
+# To build the image locally instead of pulling, add docker-compose.build.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml -f docker-compose.dev.yml up -d --build
 services:
   configserver:
-    build:
-      context: ../..
-      dockerfile: deploy/configserver/Dockerfile
-    image: socksit-configserver:latest
+    # Pin a version by setting CONFIGSERVER_IMAGE=ghcr.io/<owner>/socksit-configserver:X.Y.Z
+    image: ${CONFIGSERVER_IMAGE:-ghcr.io/spot94/socksit-configserver:latest}
+    pull_policy: always
     restart: unless-stopped
     environment:
       LISTEN: ":8080"
