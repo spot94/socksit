@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 
 	"socksit/internal/config"
 	"socksit/internal/ipc"
+	"socksit/internal/logfile"
 	"socksit/internal/proxytest"
 	"socksit/internal/service"
 )
@@ -143,8 +143,11 @@ func cmdLogs(path string, args []string) error {
 		name = "audit.log"
 	}
 	p := filepath.Join(defaultDataDir(), name)
-	lines, err := tailFile(p, *n)
+	lines, err := logfile.Tail(p, *n) // reads from the end + strips ANSI colour
 	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("no log yet at %s (has the service run?)", p)
+		}
 		return err
 	}
 	for _, ln := range lines {
@@ -156,33 +159,8 @@ func cmdLogs(path string, args []string) error {
 	return nil
 }
 
-// tailFile returns the last n lines of the file at p.
-func tailFile(p string, n int) ([]string, error) {
-	f, err := os.Open(p)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("no log yet at %s (has the service run?)", p)
-		}
-		return nil, err
-	}
-	defer f.Close()
-	var lines []string
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for sc.Scan() {
-		lines = append(lines, sc.Text())
-		if len(lines) > n {
-			lines = lines[1:] // keep only the last n (ring)
-		}
-	}
-	if err := sc.Err(); err != nil {
-		return nil, err
-	}
-	return lines, nil
-}
-
-// followFile streams bytes appended to p after the current end, until the
-// process is interrupted.
+// followFile streams bytes appended to p after the current end (ANSI colour
+// stripped), until the process is interrupted.
 func followFile(p string) error {
 	f, err := os.Open(p)
 	if err != nil {
@@ -194,7 +172,7 @@ func followFile(p string) error {
 	for {
 		n, err := f.ReadAt(buf, off)
 		if n > 0 {
-			os.Stdout.Write(buf[:n])
+			os.Stdout.Write(logfile.StripANSI(buf[:n]))
 			off += int64(n)
 		}
 		if err != nil && err != io.EOF {

@@ -49,7 +49,11 @@ type Config struct {
 	ShowTray *bool   `yaml:"show_tray"`
 	DNS      DNS     `yaml:"dns"`
 	Control  Control `yaml:"control"`
-	Update   Update  `yaml:"update"`
+	// Log controls diagnostic verbosity. Level is a client-local preference
+	// (error|warn|info|debug|trace, default warn), preserved across managed
+	// fetches so raising it for troubleshooting is not undone by the next feed.
+	Log    Log    `yaml:"log"`
+	Update Update `yaml:"update"`
 	// ConfigSource optionally pulls this config from a URL (managed config). It is
 	// a client-local policy and is preserved across remote fetches (a fetched
 	// config cannot change it), so managed mode can't lock or unlock itself.
@@ -158,6 +162,13 @@ type Control struct {
 	ClashAPI string `yaml:"clash_api"`
 }
 
+// Log holds logging preferences. Level maps to the sing-box engine log level and
+// also governs how much the service itself writes to socksit.log.
+type Log struct {
+	// Level: error | warn (default) | info | debug | trace.
+	Level string `yaml:"level"`
+}
+
 // Default returns a config populated with the first-run defaults: empty
 // allowlist (nothing proxied until the user adds apps), greedy capture,
 // kill-switch on.
@@ -177,6 +188,7 @@ func Default() *Config {
 		ShowTray:      &tray,
 		DNS:           DNS{FakeIPv4: "198.18.0.0/15"},
 		Control:       Control{ClashAPI: "127.0.0.1:9797"},
+		Log:           Log{Level: "warn"},
 		Update: Update{
 			Endpoint:      "https://github.com/spot94/socksit/releases/latest/download",
 			Channel:       "stable",
@@ -287,6 +299,14 @@ func (c *Config) CheckEvery() time.Duration {
 // KillSwitchOn reports the effective kill-switch setting (default true).
 func (c *Config) KillSwitchOn() bool { return c.KillSwitch == nil || *c.KillSwitch }
 
+// LogLevel reports the effective log level (default warn).
+func (c *Config) LogLevel() string {
+	if c.Log.Level == "" {
+		return "warn"
+	}
+	return c.Log.Level
+}
+
 // ShowTrayEnabled reports the effective tray setting (default true, so configs
 // written before this option keep showing the tray).
 func (c *Config) ShowTrayEnabled() bool { return c.ShowTray == nil || *c.ShowTray }
@@ -315,6 +335,9 @@ func (c *Config) applyDefaults() {
 	c.DNS.FakeIPv6 = ""
 	if c.Control.ClashAPI == "" {
 		c.Control.ClashAPI = d.Control.ClashAPI
+	}
+	if c.Log.Level == "" {
+		c.Log.Level = d.Log.Level
 	}
 	if c.Update.Channel == "" {
 		c.Update.Channel = d.Update.Channel
@@ -363,6 +386,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("control.clash_api: must be host:port, got %q: %w", c.Control.ClashAPI, err)
 	} else if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
 		return fmt.Errorf("control.clash_api: must listen on loopback, got %q", host)
+	}
+	switch c.Log.Level {
+	case "", "error", "warn", "info", "debug", "trace":
+	default:
+		return fmt.Errorf("log.level: must be error|warn|info|debug|trace, got %q", c.Log.Level)
 	}
 	if err := c.validateUpdate(); err != nil {
 		return err

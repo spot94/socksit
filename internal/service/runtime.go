@@ -25,6 +25,7 @@ import (
 	"socksit/internal/config"
 	"socksit/internal/engine"
 	"socksit/internal/ipc"
+	"socksit/internal/logfile"
 	"socksit/internal/netstate"
 	"socksit/internal/singbox"
 	"socksit/internal/updates"
@@ -32,6 +33,16 @@ import (
 
 // credentialEntropy salts the DPAPI blob (defense in depth; see KTD7).
 const credentialEntropy = "socksit-credentials-v1"
+
+// Log rotation thresholds. socksit.log captures the whole engine output for an
+// always-on service, so it is capped tightly; audit.log grows slowly but must
+// keep a long trail (SEC-3), so it rotates with generous retention.
+const (
+	runtimeLogMaxSize = 10 << 20 // 10 MiB per segment (~40 MiB with backups)
+	runtimeLogBackups = 3
+	auditLogMaxSize   = 5 << 20 // 5 MiB per segment (~55 MiB of audit history)
+	auditLogBackups   = 10
+)
 
 // Runtime ties the components together. It runs identically under the SCM and
 // in interactive/debug mode.
@@ -69,9 +80,9 @@ func (r *Runtime) Run(ctx context.Context) error {
 	// Mirror engine + service output to a log file (keeps the console for `run`).
 	// safeMulti ignores per-writer errors, so a missing console (GUI-subsystem
 	// service) never blocks the file write.
-	if lf, err := os.OpenFile(filepath.Join(r.DataDir, "socksit.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
-		r.log = safeMulti{r.log, lf}
-		defer lf.Close()
+	if rot, err := logfile.NewRotator(filepath.Join(r.DataDir, "socksit.log"), runtimeLogMaxSize, runtimeLogBackups); err == nil {
+		r.log = safeMulti{r.log, rot}
+		defer rot.Close()
 	}
 	if r.ensureFirstRunConfig() {
 		fmt.Fprintf(r.log, "First run: created a default config at %s\n", r.configPath())
@@ -84,11 +95,12 @@ func (r *Runtime) Run(ctx context.Context) error {
 			"  (You can also edit the config file directly; changes apply automatically.)\n",
 		r.configPath(), r.DataDir)
 
-	auditFile, _ := os.OpenFile(filepath.Join(r.DataDir, "audit.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if auditFile != nil {
-		defer auditFile.Close()
+	var auditW io.Writer = io.Discard
+	if rot, err := logfile.NewRotator(filepath.Join(r.DataDir, "audit.log"), auditLogMaxSize, auditLogBackups); err == nil {
+		auditW = rot
+		defer rot.Close()
 	}
-	auditLog := audit.New(orDiscard(auditFile))
+	auditLog := audit.New(auditW)
 
 	if needs, detail, err := netstate.Reconcile(); err == nil && needs {
 		fmt.Fprintf(r.log, "reconcile: %s\n", detail)
@@ -270,13 +282,6 @@ func (r *Runtime) ensureFirstRunConfig() bool {
 // (OI)(CI) so new files inherit the grant, M = Modify.
 func ensureUserWritable(dir string) {
 	_ = exec.Command("icacls", dir, "/grant", "*S-1-5-32-545:(OI)(CI)M", "/C", "/Q").Run()
-}
-
-func orDiscard(w io.Writer) io.Writer {
-	if w != nil {
-		return w
-	}
-	return io.Discard
 }
 
 // safeMulti writes to every writer, ignoring individual errors so one dead sink

@@ -138,6 +138,7 @@ func (r *Runtime) fetchConfig(ctx context.Context) (configFetchResult, error) {
 	// migration (server moved / update channel / key rotation).
 	newCfg.Update = cfg.Update
 	newCfg.ConfigSource = cfg.ConfigSource
+	newCfg.Log = cfg.Log // log verbosity is a local diagnostic choice, not server-forced
 	// Fields the feed actually carries (kill_switch / proxy.udp) are server-forced;
 	// record them so the panel can lock those toggles. Absent = user-defined.
 	newCfg.ConfigSource.Locked = lockedFromFeed(body)

@@ -18,6 +18,7 @@ import (
 
 	"socksit/internal/config"
 	"socksit/internal/ipc"
+	"socksit/internal/logfile"
 	"socksit/internal/proc"
 	"socksit/internal/proxytest"
 	"socksit/internal/service"
@@ -439,13 +440,9 @@ func (a *app) logs(maxLines int) logView {
 		maxLines = 500
 	}
 	path := filepath.Join(a.dataDir, "socksit.log")
-	b, err := os.ReadFile(path)
+	lines, err := logfile.Tail(path, maxLines) // reads from the end + strips ANSI colour
 	if err != nil {
 		return logView{Text: "(no log yet at " + path + ")"}
-	}
-	lines := strings.Split(strings.ReplaceAll(string(b), "\r\n", "\n"), "\n")
-	if len(lines) > maxLines {
-		lines = lines[len(lines)-maxLines:]
 	}
 	return logView{Text: strings.Join(lines, "\n")}
 }

@@ -26,6 +26,7 @@ func configCmd() *command {
 			{Name: "validate", Aliases: []string{"check"}, Summary: "validate the config with sing-box", Run: cmdConfigValidate},
 			{Name: "gen", Summary: "generate a sing-box config.json", Run: cmdConfigGen},
 			{Name: "apply", Summary: "load a config file into the service", Run: cmdConfigApply},
+			{Name: "log-level", Summary: "show or set the log level", Run: cmdConfigLogLevel},
 			{Name: "app", Summary: "add/remove/list routed apps", Children: []*command{
 				{Name: "add", Summary: "add one or more apps", Run: cmdConfigAppAdd},
 				{Name: "rm", Aliases: []string{"remove"}, Summary: "remove an app", Run: cmdConfigAppRm},
@@ -159,6 +160,32 @@ func cmdConfigApply(path string, args []string) error {
 	}
 	fmt.Printf("applied %s → %s\n", *in, where)
 	return nil
+}
+
+func cmdConfigLogLevel(path string, args []string) error {
+	fs := newFlagSet(path, "[error|warn|info|debug|trace]", "show (no arg) or set the engine + service log level")
+	_ = fs.Parse(args)
+	if fs.NArg() == 0 {
+		c, err := loadConfig()
+		if err != nil {
+			return err
+		}
+		fmt.Println(c.LogLevel())
+		return nil
+	}
+	lvl := strings.ToLower(strings.TrimSpace(fs.Arg(0)))
+	switch lvl {
+	case "error", "warn", "info", "debug", "trace":
+	default:
+		return fmt.Errorf("invalid level %q (want error|warn|info|debug|trace)", fs.Arg(0))
+	}
+	return editConfig(func(c *config.Config) (string, error) {
+		if strings.EqualFold(c.LogLevel(), lvl) {
+			return "", errNoChange
+		}
+		c.Log.Level = lvl
+		return "log level → " + lvl, nil
+	})
 }
 
 // --- app add/rm/list ---

@@ -36,7 +36,7 @@ func Generate(c *config.Config) (*Config, error) {
 	allow := c.Mode == config.ModeAllowlist
 
 	out := &Config{
-		Log: &Log{Level: "warn", Timestamp: true}, // warn: avoid per-connection INFO log bloat
+		Log: &Log{Level: c.LogLevel(), Timestamp: true}, // default warn: avoid per-connection INFO log bloat
 		// IPv4-only datapath: the TUN has no IPv6 address (below), so v6 is not
 		// carried through the tunnel and stays native — otherwise dual-stack hosts
 		// (yandex, google) get RESET when the browser tries v6 through a TUN whose
