@@ -29,7 +29,8 @@ param(
   [string]$PfxPassword,
   [string]$TSDlib,
   [string]$TSMetadata,
-  [string]$TimestampUrl = "http://timestamp.digicert.com"
+  [string]$TimestampUrl = "http://timestamp.digicert.com",
+  [switch]$SkipVerify   # skip the trust-chain verify (CI: the runner won't trust a self-signed/internal-CA chain)
 )
 $ErrorActionPreference = "Stop"
 
@@ -59,7 +60,10 @@ foreach ($f in $Files) {
   $a += $f
   Write-Host "Signing $f ..."
   & $signtool @a
+  if ($LASTEXITCODE -ne 0) { throw "signtool sign failed for $f (exit $LASTEXITCODE)" }
 }
 
-Write-Host "`nVerifying (a self-signed cert not in a trusted root will fail here — expected):"
-foreach ($f in $Files) { & $signtool verify /pa /v $f }
+if (-not $SkipVerify) {
+  Write-Host "`nVerifying (a self-signed cert not in a trusted root will fail here — expected):"
+  foreach ($f in $Files) { & $signtool verify /pa /v $f }
+}

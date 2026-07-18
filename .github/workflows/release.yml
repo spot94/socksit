@@ -3,8 +3,15 @@ name: release
 # Publishes a signed release when you push a version tag, e.g.:
 #   git tag v0.1.0 && git push origin v0.1.0
 # Requires repo secret SOCKSIT_SIGN_KEY = base64 Ed25519 private key (from
-# `go run ./cmd/mksign genkey`). The matching public key is compiled into the
-# binary (internal/updates.bakedKeys). See docs/update-design.md.
+# `go run ./cmd/mksign genkey`) — this signs the UPDATE MANIFEST, not the exe. The
+# matching public key is compiled into the binary (internal/updates.bakedKeys).
+# See docs/update-design.md.
+#
+# Optional Authenticode code-signing of socksit.exe (removes SmartScreen "unknown
+# publisher" and lowers AV/behavioral false positives such as Kaspersky's
+# PDM:Trojan.Win32.Generic): set repo secrets WINDOWS_CERT_PFX_BASE64 (base64 of a
+# code-signing .pfx) and WINDOWS_CERT_PASSWORD. Absent → exe is published unsigned.
+# See docs/signing.md.
 
 on:
   push:
@@ -44,6 +51,30 @@ jobs:
             -ldflags "-H=windowsgui -s -w -X main.Version=${{ steps.meta.outputs.version }}" \
             -o dist/socksit.exe ./cmd/socksit
           cp assets/bin/sing-box.exe dist/sing-box.exe
+
+      # Authenticode-sign the exe we build (NOT sing-box.exe — it's a vendor binary
+      # with its own upstream signature). Runs BEFORE "Build + sign manifest":
+      # signing changes socksit.exe's bytes and mksign hashes it for the update
+      # manifest, so the manifest must cover the signed file. No cert secret set →
+      # publishes unsigned (as before).
+      - name: Authenticode-sign socksit.exe
+        shell: pwsh
+        env:
+          WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PFX_BASE64)) {
+            Write-Host "::warning::No WINDOWS_CERT_PFX_BASE64 secret set — publishing an UNSIGNED socksit.exe (SmartScreen/AV will flag it)."
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
+          try {
+            ./build/sign.ps1 -Pfx $pfx -PfxPassword $env:WINDOWS_CERT_PASSWORD -Files dist/socksit.exe -SkipVerify
+          }
+          finally {
+            Remove-Item $pfx -Force -ErrorAction SilentlyContinue
+          }
 
       - name: Build + sign manifest
         shell: bash

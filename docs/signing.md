@@ -69,6 +69,34 @@ signtool verify /pa /v socksit-setup.exe
 Для self-signed без доверенного корня будет ошибка цепочки — это ожидаемо; проверяй на машине,
 где сертификат уже в Trusted Root.
 
+## 6. Подпись в CI (GitHub Release)
+
+Воркфлоу `.github/workflows/release.yml` подписывает `socksit.exe` автоматически,
+если в репозитории заданы два секрета (иначе шаг — no-op и exe публикуется
+неподписанным, как раньше, с предупреждением в логе):
+
+- `WINDOWS_CERT_PFX_BASE64` — ваш code-signing `.pfx` в base64;
+- `WINDOWS_CERT_PASSWORD` — пароль к нему.
+
+Подготовить base64 из `.pfx`:
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("codesign.pfx")) | Set-Clipboard
+```
+Затем: репозиторий → **Settings → Secrets and variables → Actions → New repository
+secret** — добавить `WINDOWS_CERT_PFX_BASE64` (вставить base64) и
+`WINDOWS_CERT_PASSWORD`.
+
+Детали:
+- Подписывается **только** `socksit.exe`; `sing-box.exe` — вендорный, не трогаем.
+- Шаг стоит **до** генерации манифеста: `mksign` считает хеш уже подписанного файла,
+  иначе проверка обновлений на клиенте разъедется.
+- В CI вызывается `build/sign.ps1 … -SkipVerify` — раннер GitHub не доверяет
+  self-signed/внутренней CA-цепочке, поэтому финальную проверку цепочки пропускаем
+  (сам факт успешной подписи проверяется по коду возврата `signtool sign`).
+- Хранение `.pfx` в секрете подходит для self-signed / внутреннего CA. Для **Azure
+  Trusted Signing** в CI — вместо PFX прокинуть `-TSDlib`/`-TSMetadata` и azure-login
+  (можно добавить позже).
+
 ## Правила
 
 - Всегда таймстамп (`/tr`) — подпись остаётся валидной после истечения сертификата
