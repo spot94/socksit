@@ -18,6 +18,12 @@ const (
 	ModeBlocklist = "blocklist" // everything goes through the proxy except listed apps
 )
 
+// Merge modes for the managed-config feed.
+const (
+	MergeReplace  = "replace"  // remote config fully replaces the local one (default)
+	MergeOverride = "override" // remote overrides only specified fields; app lists union
+)
+
 // Config is the parsed socksit.yaml.
 type Config struct {
 	Proxy Proxy    `yaml:"proxy"`
@@ -48,6 +54,11 @@ type Config struct {
 	// a client-local policy and is preserved across remote fetches (a fetched
 	// config cannot change it), so managed mode can't lock or unlock itself.
 	ConfigSource ConfigSource `yaml:"config_source"`
+	// ManagedApps is the app list contributed by the managed feed in "override"
+	// merge mode. It is maintained by the service (mirrors the remote's apps) and
+	// is combined with the user's own Apps for the effective routing set — see
+	// EffectiveApps. Not meant to be hand-edited. Empty/absent in replace mode.
+	ManagedApps []string `yaml:"managed_apps,omitempty"`
 }
 
 // ConfigSource describes an optional remote config feed. Because a remote config
@@ -60,6 +71,11 @@ type ConfigSource struct {
 	Interval string `yaml:"interval"`
 	// Signed requires a matching <url>.sig; true (default) is strongly recommended.
 	Signed *bool `yaml:"signed"`
+	// Merge selects how the fetched config is applied: "replace" (default) swaps
+	// the whole local config for the remote one; "override" applies only the fields
+	// the remote actually specifies and keeps local values for the rest, and unions
+	// the app lists (remote apps + the user's own apps). See MergeMode/EffectiveApps.
+	Merge string `yaml:"merge,omitempty"`
 	// PubKey is the base64 Ed25519 public key that verifies the feed's signature.
 	// It is provisioned by the operator (NOT the app author): each deployment runs
 	// its own signed config channel with its own key. Generate a pair with
@@ -151,6 +167,45 @@ func (c *Config) ConfigManaged() bool { return strings.TrimSpace(c.ConfigSource.
 
 // ConfigSigned reports the effective signature requirement (default true).
 func (c *Config) ConfigSigned() bool { return c.ConfigSource.Signed == nil || *c.ConfigSource.Signed }
+
+// MergeMode reports the effective managed-config merge mode (default replace).
+func (c *Config) MergeMode() string {
+	if strings.EqualFold(strings.TrimSpace(c.ConfigSource.Merge), MergeOverride) {
+		return MergeOverride
+	}
+	return MergeReplace
+}
+
+// EffectiveApps is the app list the engine actually routes. Normally it is just
+// Apps; under a managed feed in "override" mode it is the union of the user's own
+// Apps and the feed-provided ManagedApps (case-insensitive dedupe, user first).
+func (c *Config) EffectiveApps() []string {
+	if c.ConfigManaged() && c.MergeMode() == MergeOverride {
+		return dedupeApps(c.Apps, c.ManagedApps)
+	}
+	return c.Apps
+}
+
+// dedupeApps concatenates app lists dropping blanks and case-insensitive
+// duplicates, preserving first-seen order.
+func dedupeApps(lists ...[]string) []string {
+	seen := make(map[string]bool)
+	var out []string
+	for _, list := range lists {
+		for _, a := range list {
+			a = strings.TrimSpace(a)
+			if a == "" {
+				continue
+			}
+			k := strings.ToLower(a)
+			if !seen[k] {
+				seen[k] = true
+				out = append(out, a)
+			}
+		}
+	}
+	return out
+}
 
 // ConfigEvery is the effective refresh interval (default 1h, min 1m).
 func (c *Config) ConfigEvery() time.Duration {
@@ -272,6 +327,9 @@ func (c *Config) Validate() error {
 		if raw, err := base64.StdEncoding.DecodeString(pk); err != nil || len(raw) != 32 {
 			return fmt.Errorf("config_source.pubkey: must be a base64 32-byte Ed25519 public key")
 		}
+	}
+	if m := strings.TrimSpace(c.ConfigSource.Merge); m != "" && !strings.EqualFold(m, MergeReplace) && !strings.EqualFold(m, MergeOverride) {
+		return fmt.Errorf("config_source.merge: must be %q or %q, got %q", MergeReplace, MergeOverride, m)
 	}
 	return nil
 }

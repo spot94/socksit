@@ -72,6 +72,8 @@ type configView struct {
 	CfgInterval   string   `json:"cfgInterval"`
 	CfgSigned     bool     `json:"cfgSigned"`
 	CfgPubKey     string   `json:"cfgPubKey"`
+	CfgMerge      string   `json:"cfgMerge"`
+	ManagedApps   []string `json:"managedApps"`
 }
 
 type saveInput struct {
@@ -89,6 +91,7 @@ type saveInput struct {
 	CfgInterval   string   `json:"cfgInterval"`
 	CfgSigned     bool     `json:"cfgSigned"`
 	CfgPubKey     string   `json:"cfgPubKey"`
+	CfgMerge      string   `json:"cfgMerge"`
 }
 
 type result struct {
@@ -320,6 +323,8 @@ func (a *app) getConfig() configView {
 		CfgInterval:   c.ConfigSource.Interval,
 		CfgSigned:     c.ConfigSigned(),
 		CfgPubKey:     c.ConfigSource.PubKey,
+		CfgMerge:      c.MergeMode(),
+		ManagedApps:   nonNil(c.ManagedApps),
 	}
 }
 
@@ -348,6 +353,11 @@ func (a *app) saveConfig(in saveInput) result {
 	cs := in.CfgSigned
 	c.ConfigSource.Signed = &cs
 	c.ConfigSource.PubKey = strings.TrimSpace(in.CfgPubKey)
+	if strings.EqualFold(strings.TrimSpace(in.CfgMerge), config.MergeOverride) {
+		c.ConfigSource.Merge = config.MergeOverride
+	} else {
+		c.ConfigSource.Merge = "" // replace (default); omitempty keeps the YAML clean
+	}
 
 	b, err := yaml.Marshal(c)
 	if err != nil {

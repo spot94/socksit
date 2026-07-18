@@ -30,8 +30,9 @@ func Generate(c *config.Config) (*Config, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
-	regexes := appRegexes(c.Apps)
-	names := appNames(c.Apps)
+	apps := c.EffectiveApps() // in override-managed mode this unions user + feed apps
+	regexes := appRegexes(apps)
+	names := appNames(apps)
 	allow := c.Mode == config.ModeAllowlist
 
 	out := &Config{

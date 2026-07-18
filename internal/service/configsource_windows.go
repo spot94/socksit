@@ -114,13 +114,20 @@ func (r *Runtime) fetchConfig(ctx context.Context) (configFetchResult, error) {
 			return res, err
 		}
 	}
-	newCfg, err := config.Parse(body)
+	var newCfg *config.Config
+	if cfg.MergeMode() == config.MergeOverride {
+		newCfg, err = mergeManagedConfig(cfg, body)
+	} else {
+		if newCfg, err = config.Parse(body); err == nil {
+			newCfg.ConfigSource = cfg.ConfigSource // keep local policy
+			newCfg.ManagedApps = nil               // replace mode has no separate managed set
+		}
+	}
 	if err != nil {
 		res.Error = "remote config is invalid: " + err.Error()
 		r.lastConfig.Store(&res)
 		return res, err
 	}
-	newCfg.ConfigSource = cfg.ConfigSource // keep local policy
 
 	newBytes, err := yaml.Marshal(newCfg)
 	if err != nil {
@@ -141,6 +148,73 @@ func (r *Runtime) fetchConfig(ctx context.Context) (configFetchResult, error) {
 	res.Fetched = time.Now().UTC().Format(time.RFC3339)
 	r.lastConfig.Store(&res)
 	return res, nil
+}
+
+// mergeManagedConfig applies the remote config as an OVERRIDE onto the current
+// local config: only the keys the remote actually specifies (recursing into
+// nested maps) replace local values; everything the remote omits keeps its local
+// value. The app lists are unioned instead of replaced — the user's own apps are
+// preserved and the remote's apps are mirrored into managed_apps, which
+// EffectiveApps combines at generate time. The local config_source policy is
+// preserved so the feed can't reconfigure or lock itself.
+func mergeManagedConfig(local *config.Config, remoteBody []byte) (*config.Config, error) {
+	var remoteMap map[string]any
+	if err := yaml.Unmarshal(remoteBody, &remoteMap); err != nil {
+		return nil, err
+	}
+	if len(remoteMap) == 0 {
+		return nil, errors.New("remote config is empty")
+	}
+	localBytes, err := yaml.Marshal(local)
+	if err != nil {
+		return nil, err
+	}
+	var localMap map[string]any
+	if err := yaml.Unmarshal(localBytes, &localMap); err != nil {
+		return nil, err
+	}
+	if localMap == nil {
+		localMap = map[string]any{}
+	}
+	merged := deepMerge(localMap, remoteMap)
+	// App lists union rather than replace: keep the user's own apps, and mirror the
+	// remote's apps into managed_apps (EffectiveApps combines them at generate time).
+	merged["apps"] = localMap["apps"]
+	if ra, ok := remoteMap["apps"]; ok {
+		merged["managed_apps"] = ra
+	} else {
+		merged["managed_apps"] = localMap["managed_apps"]
+	}
+	// Preserve the local managed-config policy (URL, key, interval, merge mode).
+	merged["config_source"] = localMap["config_source"]
+
+	mergedBytes, err := yaml.Marshal(merged)
+	if err != nil {
+		return nil, err
+	}
+	return config.Parse(mergedBytes)
+}
+
+// deepMerge returns a copy of base with patch applied: keys present in patch
+// override base, recursing into nested maps; keys absent from patch keep their
+// base value.
+func deepMerge(base, patch map[string]any) map[string]any {
+	out := make(map[string]any, len(base))
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, pv := range patch {
+		if bv, ok := out[k]; ok {
+			if bm, ok1 := bv.(map[string]any); ok1 {
+				if pm, ok2 := pv.(map[string]any); ok2 {
+					out[k] = deepMerge(bm, pm)
+					continue
+				}
+			}
+		}
+		out[k] = pv
+	}
+	return out
 }
 
 func httpGetBytes(ctx context.Context, client *http.Client, url string, limit int64) ([]byte, error) {

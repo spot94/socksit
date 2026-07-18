@@ -212,6 +212,7 @@
         </div>
         <ul class="applist" id="appList"></ul>
         <div class="sub muted" style="margin-top:8px" data-i18n="hint.apps">Exact .exe name (any folder) or a full path. For web apps add the browser (chrome.exe / msedge.exe).</div>
+        <div class="sub muted" id="managedAppsBox" style="margin-top:8px;display:none"><span data-i18n="cfg.managedApps">Also proxied, from the managed config:</span> <span id="managedAppsList" class="mono"></span></div>
       </div>
 
       <div class="card" style="margin-top:14px">
@@ -219,9 +220,11 @@
         <div class="form" style="margin-top:8px">
           <label class="fld wide"><span data-i18n="cfg.url">Config URL</span><input type="text" id="cfgUrl" data-i18n-ph="cfg.urlPh"></label>
           <label class="fld"><span data-i18n="cfg.interval">Refresh interval</span><input type="text" id="cfgInterval" placeholder="1h"></label>
+          <label class="fld"><span data-i18n="cfg.merge">On update</span><select id="cfgMerge"><option value="replace" data-i18n="cfg.merge.replace">Replace config</option><option value="override" data-i18n="cfg.merge.override">Override fields</option></select></label>
           <label class="switch" style="align-self:end;height:38px"><input type="checkbox" id="cfgSigned"><span class="track"></span><span data-i18n="cfg.signed">Require signature</span></label>
           <label class="fld wide"><span data-i18n="cfg.pubkey">Trusted key (base64)</span><input type="text" id="cfgPubKey" class="mono" data-i18n-ph="cfg.pubkeyPh"></label>
         </div>
+        <div class="sub muted" id="cfgMergeHint" style="margin-top:8px" data-i18n="cfg.mergeHint">Replace: the whole local config is swapped for the remote one. Override: only the fields the remote specifies change; your other settings and your own apps are kept.</div>
         <div class="row" style="margin-top:10px">
           <button id="btnCfgFetch" data-i18n="cfg.fetch">Fetch now</button>
           <span class="muted" id="cfgStatus"></span>
@@ -346,7 +349,7 @@ const I18N = {
     'upd.channel':'Channel','upd.mode':'Mode','upd.mode.off':'Off','upd.mode.notify':'Notify','upd.mode.auto':'Auto',
     'upd.interval':'Check interval','upd.proxy':'Proxy for checks','upd.proxyPh':'empty=direct · system · use-socks · socks5://host:port',
     'upd.save':'Save','upd.check':'Check now','upd.apply':'Apply update','upd.applying':'Downloading and applying…','upd.upToDate':'Up to date (v{v})','upd.available':'Update available: v{v}','upd.checking':'Checking…','upd.hint':'Trust is verified by signature — the source/CDN is untrusted.',
-    'cfg.title':'Config source (optional)','cfg.url':'Config URL','cfg.urlPh':'https://…/socksit.yaml — empty = local config','cfg.interval':'Refresh interval','cfg.signed':'Require signature','cfg.pubkey':'Trusted key (base64)','cfg.pubkeyPh':'Ed25519 public key from `mksign genkey`','cfg.fetch':'Fetch now','cfg.fetching':'Fetching…','cfg.local':'Using the local config.','cfg.fetched':'Last fetched {t}','cfg.changed':' (updated)','cfg.hint':'When set, the config is pulled from this URL and applied automatically (on start and on the interval); local edits are overwritten on refresh. A signed feed (recommended) needs a matching <url>.sig verified with YOUR Trusted key — generate a keypair with `mksign genkey`, put the public half here, sign configs with the private half.'
+    'cfg.title':'Config source (optional)','cfg.url':'Config URL','cfg.urlPh':'https://…/socksit.yaml — empty = local config','cfg.interval':'Refresh interval','cfg.merge':'On update','cfg.merge.replace':'Replace config','cfg.merge.override':'Override fields','cfg.mergeHint':'Replace: the whole local config is swapped for the remote one. Override: only the fields the remote specifies change; your other settings are kept, and the proxied apps are the remote list plus your own.','cfg.managedApps':'Also proxied, from the managed config:','cfg.signed':'Require signature','cfg.pubkey':'Trusted key (base64)','cfg.pubkeyPh':'Ed25519 public key from `mksign genkey`','cfg.fetch':'Fetch now','cfg.fetching':'Fetching…','cfg.local':'Using the local config.','cfg.fetched':'Last fetched {t}','cfg.changed':' (updated)','cfg.hint':'When set, the config is pulled from this URL and applied automatically (on start and on the interval); local edits are overwritten on refresh. A signed feed (recommended) needs a matching <url>.sig verified with YOUR Trusted key — generate a keypair with `mksign genkey`, put the public half here, sign configs with the private half.'
   },
   ru: {
     'nav.dashboard':'Обзор','nav.settings':'Настройки','nav.statistics':'Статистика','nav.logs':'Логи','nav.diagnostics':'Диагностика','nav.about':'О программе',
@@ -379,7 +382,7 @@ const I18N = {
     'upd.channel':'Канал','upd.mode':'Режим','upd.mode.off':'Выкл','upd.mode.notify':'Уведомлять','upd.mode.auto':'Авто',
     'upd.interval':'Интервал проверки','upd.proxy':'Прокси для проверок','upd.proxyPh':'пусто=напрямую · system · use-socks · socks5://host:port',
     'upd.save':'Сохранить','upd.check':'Проверить сейчас','upd.apply':'Установить обновление','upd.applying':'Скачивание и установка…','upd.upToDate':'Актуальная версия (v{v})','upd.available':'Доступно обновление: v{v}','upd.checking':'Проверка…','upd.hint':'Подлинность проверяется подписью — источник/CDN недоверенный.',
-    'cfg.title':'Источник конфига (опц.)','cfg.url':'URL конфига','cfg.urlPh':'https://…/socksit.yaml — пусто = локальный конфиг','cfg.interval':'Интервал обновления','cfg.signed':'Требовать подпись','cfg.pubkey':'Доверенный ключ (base64)','cfg.pubkeyPh':'публичный Ed25519 из `mksign genkey`','cfg.fetch':'Обновить сейчас','cfg.fetching':'Обновление…','cfg.local':'Используется локальный конфиг.','cfg.fetched':'Обновлено {t}','cfg.changed':' (изменён)','cfg.hint':'Если задан — конфиг тянется по этому URL и применяется автоматически (при старте и по интервалу); локальные правки перезаписываются. Для подписанного канала (рекомендуется) нужен <url>.sig, проверяемый ТВОИМ доверенным ключом — сгенерируй пару `mksign genkey`, публичную половину впиши сюда, конфиги подписывай приватной.'
+    'cfg.title':'Источник конфига (опц.)','cfg.url':'URL конфига','cfg.urlPh':'https://…/socksit.yaml — пусто = локальный конфиг','cfg.interval':'Интервал обновления','cfg.merge':'При обновлении','cfg.merge.replace':'Заменять конфиг','cfg.merge.override':'Переопределять поля','cfg.mergeHint':'Заменять: локальный конфиг целиком меняется на удалённый. Переопределять: меняются только поля, заданные в удалённом; остальные настройки сохраняются, а список приложений = удалённый плюс твои личные.','cfg.managedApps':'Также проксируются, из управляемого конфига:','cfg.signed':'Требовать подпись','cfg.pubkey':'Доверенный ключ (base64)','cfg.pubkeyPh':'публичный Ed25519 из `mksign genkey`','cfg.fetch':'Обновить сейчас','cfg.fetching':'Обновление…','cfg.local':'Используется локальный конфиг.','cfg.fetched':'Обновлено {t}','cfg.changed':' (изменён)','cfg.hint':'Если задан — конфиг тянется по этому URL и применяется автоматически (при старте и по интервалу); локальные правки перезаписываются. Для подписанного канала (рекомендуется) нужен <url>.sig, проверяемый ТВОИМ доверенным ключом — сгенерируй пару `mksign genkey`, публичную половину впиши сюда, конфиги подписывай приватной.'
   }
 };
 let lang = 'en';
@@ -505,6 +508,12 @@ document.getElementById('btnTest').onclick = ()=>testProxy(document.getElementBy
 
 /* ---------- settings ---------- */
 let apps = [];
+let managedApps = [];
+function renderManagedApps(){
+  const box = g('managedAppsBox'), list = g('managedAppsList'); if(!box||!list) return;
+  if(g('cfgMerge').value === 'override' && managedApps.length){ list.textContent = managedApps.join(', '); box.style.display=''; }
+  else { box.style.display='none'; }
+}
 function renderApps(){
   const ul = document.getElementById('appList'); if(!ul) return; ul.innerHTML='';
   if(!apps.length){ const li=document.createElement('li'); li.className='muted empty'; li.textContent=t('msg.noApps'); ul.appendChild(li); return; }
@@ -524,10 +533,13 @@ async function loadSettings(){
   document.getElementById('fUdp').checked = !!c.udp;
   document.getElementById('fTray').checked = !!c.showTray;
   apps = (c.apps||[]).slice(); renderApps();
+  managedApps = (c.managedApps||[]).slice();
   g('cfgUrl').value = c.cfgUrl||'';
   g('cfgInterval').value = c.cfgInterval||'1h';
+  g('cfgMerge').value = c.cfgMerge || 'replace';
   g('cfgSigned').checked = (c.cfgSigned !== false);
   g('cfgPubKey').value = c.cfgPubKey||'';
+  renderManagedApps();
   loadProcs();
   loadCfgStatus();
 }
@@ -550,6 +562,7 @@ async function loadProcs(){
   dl.innerHTML = names.map(n=>'<option value="'+escapeHtml(n)+'">').join('');
 }
 document.getElementById('btnReloadProc').onclick = loadProcs;
+g('cfgMerge').onchange = renderManagedApps;
 document.getElementById('btnBrowse').onclick = async ()=>{ const p = await call('appBrowseExe'); if(p){ const i=document.getElementById('fApp'); i.value = p; i.focus(); } };
 document.getElementById('btnAddApp').onclick = ()=>{ const i=document.getElementById('fApp'); const v=(i.value||'').trim(); if(v){ apps.push(v); i.value=''; renderApps(); } };
 document.getElementById('fApp').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); document.getElementById('btnAddApp').click(); }});
@@ -560,7 +573,7 @@ function collect(){
     mode:document.getElementById('fMode').value, killSwitch:document.getElementById('fKill').checked,
     udp:document.getElementById('fUdp').checked, showTray:document.getElementById('fTray').checked,
     directSubnets:subs, apps:apps.slice(),
-    cfgUrl:document.getElementById('cfgUrl').value.trim(), cfgInterval:document.getElementById('cfgInterval').value.trim()||'1h', cfgSigned:document.getElementById('cfgSigned').checked, cfgPubKey:document.getElementById('cfgPubKey').value.trim() };
+    cfgUrl:document.getElementById('cfgUrl').value.trim(), cfgInterval:document.getElementById('cfgInterval').value.trim()||'1h', cfgMerge:document.getElementById('cfgMerge').value, cfgSigned:document.getElementById('cfgSigned').checked, cfgPubKey:document.getElementById('cfgPubKey').value.trim() };
 }
 document.getElementById('btnSave').onclick = async ()=>{ const b=document.getElementById('setBanner'); banner(b,'info',t('msg.saving'));
   const r = await call('appSaveConfig', collect()); banner(b, r.ok?'ok':'err', r.message); refreshState(); };
