@@ -1,62 +1,63 @@
-# Building turnkey installer packages (with a preset)
+# Сборка turnkey-инсталляторов (с пресетом)
 
-Goal: the end user runs one thing and everything is configured — proxy, apps,
-bypass subnets — no manual setup. You (the distributor) bake the settings into a
-**preset**.
+Цель: конечный пользователь запускает одну штуку — и всё уже настроено (прокси,
+приложения, подсети в обход), без ручной настройки. Вы (распространитель) вшиваете
+настройки в **пресет**.
 
-## End-user experience (both shapes)
+## Что видит конечный пользователь (обе схемы)
 
-Run once **as administrator**: double-click the exe → control panel → **Set up**
-(or `socksit setup` for silent/MDM). It:
-1. installs the service into `C:\Program Files\SocksIt\` (copies exe + engine),
-2. applies your preset to `C:\ProgramData\SocksIt\socksit.yaml`,
-3. starts the service.
+Запуск один раз **от администратора**: двойной клик по exe → панель → **Установить**
+(или `socksit setup` для тихой/MDM-установки). Он:
+1. ставит службу в `C:\Program Files\SocksIt\` (копирует exe + движок),
+2. применяет ваш пресет в `C:\ProgramData\SocksIt\socksit.yaml`,
+3. запускает службу.
 
-Done — proxying works with your settings. The panel offers **Restart as
-administrator** if launched without elevation.
+Готово — проксирование работает с вашими настройками. Если запущено без прав, панель
+предлагает **Перезапустить от администратора**.
 
-## Prerequisites (build machine)
+## Требования (сборочная машина)
 
-- Go toolchain; run from the repo root.
-- Engine staged at `assets/bin/sing-box.exe` (+ `libcronet.dll`) — already in the repo.
+- Тулчейн Go; запускать из корня репозитория.
+- Движок в `assets/bin/sing-box.exe` (+ `libcronet.dll`) — уже в репозитории.
 
-## Shape A — single self-contained exe (engine + preset embedded)
+## Схема A — один самодостаточный exe (движок + пресет вшиты)
 
-One file, ~70 MB. Best for end users; one build per distinct preset.
+Один файл, ~70 МБ. Лучший вариант для конечных пользователей; отдельная сборка на
+каждый пресет.
 
-1. Copy `build/preset.example.yaml` to `internal/preset/preset.yaml` and edit it.
-2. Build:
+1. Скопируйте `build/preset.example.yaml` в `internal/preset/preset.yaml` и отредактируйте.
+2. Соберите:
    ```powershell
    go build -tags "preset embed_engine" -ldflags="-H=windowsgui" -o socksit-setup.exe ./cmd/socksit
    ```
-3. Distribute the single `socksit-setup.exe`. End user: run it → **Set up**.
+3. Раздайте единственный `socksit-setup.exe`. Пользователь: запуск → **Установить**.
 
-## Shape B — bundle (exe + editable preset.yaml)
+## Схема B — комплект (exe + редактируемый preset.yaml)
 
-One build, many presets — just edit the YAML. Ships as a folder/zip.
+Одна сборка, много пресетов — просто правьте YAML. Поставляется папкой/zip.
 
-1. Build the normal binary (no per-preset rebuild):
+1. Соберите обычный бинарь (без пересборки под каждый пресет):
    ```powershell
    go build -ldflags="-H=windowsgui" -o socksit.exe ./cmd/socksit
    ```
-2. Copy `build/preset.example.yaml` to `socksit.preset.yaml`, edit it.
-3. Ship these together (folder or zip):
+2. Скопируйте `build/preset.example.yaml` в `socksit.preset.yaml`, отредактируйте.
+3. Поставляйте вместе (папка или zip):
    `socksit.exe`, `socksit.preset.yaml`, `sing-box.exe`, `libcronet.dll`.
-   End user: run `socksit.exe` → **Set up** (it reads the sibling preset).
+   Пользователь: запуск `socksit.exe` → **Установить** (прочитает соседний пресет).
 
-## Notes
+## Примечания
 
-- **Precedence:** an embedded preset (Shape A) wins over a sibling
-  `socksit.preset.yaml` (Shape B).
-- **Process names:** in the preset, `apps` must be exact running-process EXE names
-  (with `.exe`). For AI/web apps used in a browser, list the browser
-  (`chrome.exe` / `msedge.exe`) — routing is per-process, not per-site.
-- **Silent / MDM:** `socksit setup` runs and exits (GUI-subsystem build shows no
-  window). Deploy via GPO/Intune as an elevated one-shot.
-- **Re-running Set up** re-applies the preset (overwrites `socksit.yaml`); users can
-  still change settings later in the panel.
-- **Signing:** sign `socksit.exe` / `socksit-setup.exe` with your code-signing
-  certificate to avoid SmartScreen warnings (see [install.md](install.md)). Not
-  required for it to function.
-- **Data location** (`C:\ProgramData\SocksIt\`: config, logs, secrets) is fixed and
-  independent of where the exe lives.
+- **Приоритет:** вшитый пресет (Схема A) важнее файла-соседа `socksit.preset.yaml`
+  (Схема B).
+- **Имена процессов:** в пресете `apps` — точные имена EXE запущенных процессов (с
+  `.exe`). Для AI/веб-приложений в браузере укажите браузер (`chrome.exe` /
+  `msedge.exe`) — маршрутизация по процессу, а не по сайту.
+- **Тихая / MDM-установка:** `socksit setup` отрабатывает и выходит (GUI-сборка не
+  показывает окно). Разворачивайте через GPO/Intune как разовый elevated-запуск.
+- **Повторный запуск «Установить»** заново применяет пресет (перезаписывает
+  `socksit.yaml`); пользователь потом может менять настройки в панели.
+- **Подпись:** подпишите `socksit.exe` / `socksit-setup.exe` своим сертификатом
+  code-signing, чтобы избежать предупреждений SmartScreen (см. [install.md](install.md)).
+  Для работы не обязательно.
+- **Расположение данных** (`C:\ProgramData\SocksIt\`: конфиг, логи, секреты) фиксировано
+  и не зависит от того, где лежит exe.
