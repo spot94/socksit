@@ -44,6 +44,7 @@ type statusView struct {
 	Enabled bool   `json:"enabled"`
 	State   string `json:"state"`
 	Proxy   string `json:"proxy"`
+	Version string `json:"version"` // the running service's build version
 }
 
 // Run shows the tray and blocks until it quits. It is a singleton (a second
@@ -93,7 +94,7 @@ func onReady(pipe, version string) {
 	mVersion := systray.AddMenuItem("SocksIt "+version, "Version (engine: sing-box v1.13.14)")
 	mVersion.Disable()
 
-	go pollStatus(pipe, mStatus, mToggle)
+	go pollStatus(pipe, version, mStatus, mToggle)
 
 	go func() {
 		for {
@@ -114,7 +115,7 @@ func launchSelf() {
 	}
 }
 
-func pollStatus(pipe string, status, toggle *systray.MenuItem) {
+func pollStatus(pipe, version string, status, toggle *systray.MenuItem) {
 	for {
 		// Presence is bound to the service and the "Show in tray" setting.
 		if installed, _, err := service.Status(); err == nil && !installed {
@@ -125,12 +126,19 @@ func pollStatus(pipe string, status, toggle *systray.MenuItem) {
 			systray.Quit()
 			return
 		}
-		updateMenu(pipe, status, toggle)
+		if updateMenu(pipe, version, status, toggle) {
+			// The service now runs a different build than this tray (an update was
+			// applied) — exit so the keeper respawns a tray from the new binary.
+			systray.Quit()
+			return
+		}
 		time.Sleep(2 * time.Second)
 	}
 }
 
-func updateMenu(pipe string, status, toggle *systray.MenuItem) {
+// updateMenu refreshes the menu from the service status and reports whether this
+// tray is stale (the service reports a different build than our own version).
+func updateMenu(pipe, version string, status, toggle *systray.MenuItem) (stale bool) {
 	resp, err := ipc.Call(pipe, ipc.Request{Op: ipc.OpStatus}, callTimeout)
 	if err != nil || !resp.OK {
 		installed, running, _ := service.Status()
@@ -142,12 +150,17 @@ func updateMenu(pipe string, status, toggle *systray.MenuItem) {
 		toggle.Uncheck()
 		toggle.Disable()
 		systray.SetTooltip("SocksIt — " + head)
-		return
+		return false
 	}
 	var s statusView
 	if json.Unmarshal(resp.Data, &s) != nil {
 		status.SetTitle("SocksIt — unknown")
-		return
+		return false
+	}
+	// A version mismatch means an update swapped the binary and restarted the
+	// service; this tray is the old build and should hand off to a fresh one.
+	if s.Version != "" && version != "" && s.Version != version {
+		return true
 	}
 	toggle.Enable()
 	if s.Enabled {
@@ -162,6 +175,7 @@ func updateMenu(pipe string, status, toggle *systray.MenuItem) {
 		tip += " · " + s.Proxy
 	}
 	systray.SetTooltip(tip)
+	return false
 }
 
 // shortState renders a compact one-line state for the header and tooltip.

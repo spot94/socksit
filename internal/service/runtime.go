@@ -303,7 +303,7 @@ func (r *Runtime) Status() (any, error) {
 			pid = s.CurrentPID()
 		}
 	}
-	m := map[string]any{"enabled": r.enabled.Load(), "state": state, "pid": pid}
+	m := map[string]any{"enabled": r.enabled.Load(), "state": state, "pid": pid, "version": r.Version}
 	// Add a config summary for the UI. This is read-only display data and never
 	// includes secrets (credentials live only in the DPAPI blob, not the YAML).
 	if b, err := os.ReadFile(r.configPath()); err == nil {
