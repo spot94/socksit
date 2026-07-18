@@ -59,6 +59,10 @@ type Config struct {
 	// is combined with the user's own Apps for the effective routing set — see
 	// EffectiveApps. Not meant to be hand-edited. Empty/absent in replace mode.
 	ManagedApps []string `yaml:"managed_apps,omitempty"`
+	// ManagedSubnets is the same idea for direct_subnets: in override mode the
+	// feed's subnets are kept here and unioned with the user's own DirectSubnets
+	// (see EffectiveSubnets). Empty/absent in replace mode.
+	ManagedSubnets []string `yaml:"managed_subnets,omitempty"`
 }
 
 // ConfigSource describes an optional remote config feed. Because a remote config
@@ -195,14 +199,24 @@ func (c *Config) MergeMode() string {
 // Apps and the feed-provided ManagedApps (case-insensitive dedupe, user first).
 func (c *Config) EffectiveApps() []string {
 	if c.ConfigManaged() && c.MergeMode() == MergeOverride {
-		return dedupeApps(c.Apps, c.ManagedApps)
+		return dedupeList(c.Apps, c.ManagedApps)
 	}
 	return c.Apps
 }
 
-// dedupeApps concatenates app lists dropping blanks and case-insensitive
-// duplicates, preserving first-seen order.
-func dedupeApps(lists ...[]string) []string {
+// EffectiveSubnets is the direct-subnet list the engine routes: normally just
+// DirectSubnets, but under a managed feed in "override" mode it is the union of
+// the user's own DirectSubnets and the feed-provided ManagedSubnets.
+func (c *Config) EffectiveSubnets() []string {
+	if c.ConfigManaged() && c.MergeMode() == MergeOverride {
+		return dedupeList(c.DirectSubnets, c.ManagedSubnets)
+	}
+	return c.DirectSubnets
+}
+
+// dedupeList concatenates lists dropping blanks and case-insensitive duplicates,
+// preserving first-seen order.
+func dedupeList(lists ...[]string) []string {
 	seen := make(map[string]bool)
 	var out []string
 	for _, list := range lists {
@@ -315,6 +329,11 @@ func (c *Config) Validate() error {
 	for _, sn := range c.DirectSubnets {
 		if _, _, err := net.ParseCIDR(strings.TrimSpace(sn)); err != nil {
 			return fmt.Errorf("direct_subnets: invalid CIDR %q: %w", sn, err)
+		}
+	}
+	for _, sn := range c.ManagedSubnets {
+		if _, _, err := net.ParseCIDR(strings.TrimSpace(sn)); err != nil {
+			return fmt.Errorf("managed_subnets: invalid CIDR %q: %w", sn, err)
 		}
 	}
 	if _, _, err := net.ParseCIDR(c.DNS.FakeIPv4); err != nil {

@@ -123,7 +123,8 @@ func (r *Runtime) fetchConfig(ctx context.Context) (configFetchResult, error) {
 	} else {
 		if newCfg, err = config.Parse(body); err == nil {
 			newCfg.ConfigSource = cfg.ConfigSource // keep local policy
-			newCfg.ManagedApps = nil               // replace mode has no separate managed set
+			newCfg.ManagedApps = nil               // replace mode has no separate managed sets
+			newCfg.ManagedSubnets = nil
 		}
 	}
 	if err != nil {
@@ -203,6 +204,14 @@ func mergeManagedConfig(local *config.Config, remoteBody []byte) (*config.Config
 		merged["managed_apps"] = ra
 	} else {
 		merged["managed_apps"] = localMap["managed_apps"]
+	}
+	// direct_subnets union the same way: keep the user's own, mirror the feed's
+	// into managed_subnets (EffectiveSubnets combines them at generate time).
+	merged["direct_subnets"] = localMap["direct_subnets"]
+	if rs, ok := remoteMap["direct_subnets"]; ok {
+		merged["managed_subnets"] = rs
+	} else {
+		merged["managed_subnets"] = localMap["managed_subnets"]
 	}
 	// Preserve the local managed-config policy (URL, key, interval, merge mode).
 	merged["config_source"] = localMap["config_source"]

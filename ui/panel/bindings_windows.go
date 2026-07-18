@@ -76,6 +76,7 @@ type configView struct {
 	CfgProxy         string   `json:"cfgProxy"`
 	CfgPendingPubKey string   `json:"cfgPendingPubKey"`
 	ManagedApps      []string `json:"managedApps"`
+	ManagedSubnets   []string `json:"managedSubnets"`
 }
 
 type saveInput struct {
@@ -340,6 +341,7 @@ func (a *app) getConfig() configView {
 		CfgProxy:         c.ConfigSource.Proxy,
 		CfgPendingPubKey: c.ConfigSource.PendingPubKey,
 		ManagedApps:      nonNil(c.ManagedApps),
+		ManagedSubnets:   nonNil(c.ManagedSubnets),
 	}
 }
 

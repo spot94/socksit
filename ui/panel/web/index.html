@@ -200,6 +200,7 @@
           <label class="fld"><span data-i18n="lbl.password">Password</span> <span class="muted" data-i18n="note.passBlank">(blank = keep)</span><input type="password" id="fPass" data-i18n-ph="ph.keep"></label>
           <label class="fld"><span data-i18n="lbl.mode">Mode</span><select id="fMode"><option value="allowlist" data-i18n="opt.allowlist">allowlist — only listed apps</option><option value="blocklist" data-i18n="opt.blocklist">blocklist — all except listed</option></select></label>
           <label class="fld"><span data-i18n="lbl.bypass">Bypass subnets</span><input type="text" id="fSubnets" placeholder="192.168.1.0/24, 172.16.0.0/16"></label>
+          <div class="sub muted wide" id="managedSubnetsNote" style="display:none"><span data-i18n="cfg.managedSubnets">Also direct, from the managed config:</span> <span id="managedSubnetsList" class="mono"></span></div>
           <div class="wide row" style="gap:22px">
             <label class="switch"><input type="checkbox" id="fKill"><span class="track"></span><span data-i18n="sw.killswitch">Kill-switch</span></label>
             <label class="switch"><input type="checkbox" id="fUdp"><span class="track"></span><span data-i18n="sw.udp">Proxy UDP</span></label>
@@ -362,7 +363,7 @@ const I18N = {
     'upd.channel':'Channel','upd.mode':'Mode','upd.mode.off':'Off','upd.mode.notify':'Notify','upd.mode.auto':'Auto',
     'upd.interval':'Check interval','upd.proxy':'Proxy for checks','upd.proxyPh':'empty=direct · system · use-socks · socks5://host:port',
     'upd.save':'Save','upd.check':'Check now','upd.apply':'Apply update','upd.applying':'Downloading and applying…','upd.restarting':'Update installed — restarting the panel…','upd.upToDate':'Up to date (v{v})','upd.available':'Update available: v{v}','upd.checking':'Checking…','upd.hint':'Trust is verified by signature — the source/CDN is untrusted.',
-    'cfg.title':'Config source (optional)','cfg.url':'Config URL','cfg.urlPh':'https://…/socksit.yaml — empty = local config','cfg.interval':'Refresh interval','cfg.merge':'On update','cfg.merge.replace':'Replace config','cfg.merge.override':'Override fields','cfg.proxy':'Feed proxy','cfg.proxyPh':'empty = direct · system · use-socks · socks5://host:port','cfg.mergeHint':'Replace: the whole local config is swapped for the remote one. Override: only the fields the remote specifies change; your other settings are kept, and the proxied apps are the remote list plus your own.','cfg.managedApps':'Also proxied, from the managed config:','cfg.managedTag':'managed','cfg.rotate.title':'Key rotation requested','cfg.rotate.msg':'The config server asks to change the trusted key. Accepting moves the root of trust — only accept if you initiated this rotation.','cfg.rotate.accept':'Accept new key','cfg.rotate.decline':'Decline','cfg.rotate.confirm':'Change the trusted key to the proposed one? Only accept if you initiated this.','cfg.signed':'Require signature','cfg.pubkey':'Trusted key (base64)','cfg.pubkeyPh':'Ed25519 public key from `mksign genkey`','cfg.fetch':'Fetch now','cfg.fetching':'Fetching…','cfg.local':'Using the local config.','cfg.fetched':'Last fetched {t}','cfg.changed':' (updated)','cfg.hint':'When set, the config is pulled from this URL and applied automatically (on start and on the interval); local edits are overwritten on refresh. A signed feed (recommended) needs a matching <url>.sig verified with YOUR Trusted key — generate a keypair with `mksign genkey`, put the public half here, sign configs with the private half.'
+    'cfg.title':'Config source (optional)','cfg.url':'Config URL','cfg.urlPh':'https://…/socksit.yaml — empty = local config','cfg.interval':'Refresh interval','cfg.merge':'On update','cfg.merge.replace':'Replace config','cfg.merge.override':'Override fields','cfg.proxy':'Feed proxy','cfg.proxyPh':'empty = direct · system · use-socks · socks5://host:port','cfg.mergeHint':'Replace: the whole local config is swapped for the remote one. Override: only the fields the remote specifies change; your other settings are kept, and the proxied apps are the remote list plus your own.','cfg.managedApps':'Also proxied, from the managed config:','cfg.managedTag':'managed','cfg.managedSubnets':'Also direct, from the managed config:','cfg.rotate.title':'Key rotation requested','cfg.rotate.msg':'The config server asks to change the trusted key. Accepting moves the root of trust — only accept if you initiated this rotation.','cfg.rotate.accept':'Accept new key','cfg.rotate.decline':'Decline','cfg.rotate.confirm':'Change the trusted key to the proposed one? Only accept if you initiated this.','cfg.signed':'Require signature','cfg.pubkey':'Trusted key (base64)','cfg.pubkeyPh':'Ed25519 public key from `mksign genkey`','cfg.fetch':'Fetch now','cfg.fetching':'Fetching…','cfg.local':'Using the local config.','cfg.fetched':'Last fetched {t}','cfg.changed':' (updated)','cfg.hint':'When set, the config is pulled from this URL and applied automatically (on start and on the interval); local edits are overwritten on refresh. A signed feed (recommended) needs a matching <url>.sig verified with YOUR Trusted key — generate a keypair with `mksign genkey`, put the public half here, sign configs with the private half.'
   },
   ru: {
     'nav.dashboard':'Обзор','nav.settings':'Настройки','nav.statistics':'Статистика','nav.logs':'Логи','nav.diagnostics':'Диагностика','nav.about':'О программе',
@@ -395,7 +396,7 @@ const I18N = {
     'upd.channel':'Канал','upd.mode':'Режим','upd.mode.off':'Выкл','upd.mode.notify':'Уведомлять','upd.mode.auto':'Авто',
     'upd.interval':'Интервал проверки','upd.proxy':'Прокси для проверок','upd.proxyPh':'пусто=напрямую · system · use-socks · socks5://host:port',
     'upd.save':'Сохранить','upd.check':'Проверить сейчас','upd.apply':'Установить обновление','upd.applying':'Скачивание и установка…','upd.restarting':'Обновление установлено — перезапуск панели…','upd.upToDate':'Актуальная версия (v{v})','upd.available':'Доступно обновление: v{v}','upd.checking':'Проверка…','upd.hint':'Подлинность проверяется подписью — источник/CDN недоверенный.',
-    'cfg.title':'Источник конфига (опц.)','cfg.url':'URL конфига','cfg.urlPh':'https://…/socksit.yaml — пусто = локальный конфиг','cfg.interval':'Интервал обновления','cfg.merge':'При обновлении','cfg.merge.replace':'Заменять конфиг','cfg.merge.override':'Переопределять поля','cfg.proxy':'Proxy для конфига','cfg.proxyPh':'пусто = напрямую · system · use-socks · socks5://host:port','cfg.mergeHint':'Заменять: локальный конфиг целиком меняется на удалённый. Переопределять: меняются только поля, заданные в удалённом; остальные настройки сохраняются, а список приложений = удалённый плюс твои личные.','cfg.managedApps':'Также проксируются, из управляемого конфига:','cfg.managedTag':'из канала','cfg.rotate.title':'Запрос на смену ключа','cfg.rotate.msg':'Сервер конфигурации просит сменить доверенный ключ. Принятие меняет корень доверия — принимай только если ты сам инициировал ротацию.','cfg.rotate.accept':'Принять новый ключ','cfg.rotate.decline':'Отклонить','cfg.rotate.confirm':'Сменить доверенный ключ на предложенный? Принимай только если ты это инициировал.','cfg.signed':'Требовать подпись','cfg.pubkey':'Доверенный ключ (base64)','cfg.pubkeyPh':'публичный Ed25519 из `mksign genkey`','cfg.fetch':'Обновить сейчас','cfg.fetching':'Обновление…','cfg.local':'Используется локальный конфиг.','cfg.fetched':'Обновлено {t}','cfg.changed':' (изменён)','cfg.hint':'Если задан — конфиг тянется по этому URL и применяется автоматически (при старте и по интервалу); локальные правки перезаписываются. Для подписанного канала (рекомендуется) нужен <url>.sig, проверяемый ТВОИМ доверенным ключом — сгенерируй пару `mksign genkey`, публичную половину впиши сюда, конфиги подписывай приватной.'
+    'cfg.title':'Источник конфига (опц.)','cfg.url':'URL конфига','cfg.urlPh':'https://…/socksit.yaml — пусто = локальный конфиг','cfg.interval':'Интервал обновления','cfg.merge':'При обновлении','cfg.merge.replace':'Заменять конфиг','cfg.merge.override':'Переопределять поля','cfg.proxy':'Proxy для конфига','cfg.proxyPh':'пусто = напрямую · system · use-socks · socks5://host:port','cfg.mergeHint':'Заменять: локальный конфиг целиком меняется на удалённый. Переопределять: меняются только поля, заданные в удалённом; остальные настройки сохраняются, а список приложений = удалённый плюс твои личные.','cfg.managedApps':'Также проксируются, из управляемого конфига:','cfg.managedTag':'из канала','cfg.managedSubnets':'Также напрямую, из управляемого конфига:','cfg.rotate.title':'Запрос на смену ключа','cfg.rotate.msg':'Сервер конфигурации просит сменить доверенный ключ. Принятие меняет корень доверия — принимай только если ты сам инициировал ротацию.','cfg.rotate.accept':'Принять новый ключ','cfg.rotate.decline':'Отклонить','cfg.rotate.confirm':'Сменить доверенный ключ на предложенный? Принимай только если ты это инициировал.','cfg.signed':'Требовать подпись','cfg.pubkey':'Доверенный ключ (base64)','cfg.pubkeyPh':'публичный Ed25519 из `mksign genkey`','cfg.fetch':'Обновить сейчас','cfg.fetching':'Обновление…','cfg.local':'Используется локальный конфиг.','cfg.fetched':'Обновлено {t}','cfg.changed':' (изменён)','cfg.hint':'Если задан — конфиг тянется по этому URL и применяется автоматически (при старте и по интервалу); локальные правки перезаписываются. Для подписанного канала (рекомендуется) нужен <url>.sig, проверяемый ТВОИМ доверенным ключом — сгенерируй пару `mksign genkey`, публичную половину впиши сюда, конфиги подписывай приватной.'
   }
 };
 let lang = 'en';
@@ -522,6 +523,12 @@ document.getElementById('btnTest').onclick = ()=>testProxy(document.getElementBy
 /* ---------- settings ---------- */
 let apps = [];
 let managedApps = [];
+let managedSubnets = [];
+function renderManagedSubnets(){
+  const note=g('managedSubnetsNote'), list=g('managedSubnetsList'); if(!note||!list) return;
+  if(g('cfgMerge').value==='override' && managedSubnets.length){ list.textContent=managedSubnets.join(', '); note.style.display=''; }
+  else note.style.display='none';
+}
 function renderApps(){
   const ul = document.getElementById('appList'); if(!ul) return; ul.innerHTML='';
   // In override mode the feed's apps ARE proxied too; show them inline (badged,
@@ -549,6 +556,7 @@ async function loadSettings(){
   document.getElementById('fTray').checked = !!c.showTray;
   apps = (c.apps||[]).slice();
   managedApps = (c.managedApps||[]).slice();
+  managedSubnets = (c.managedSubnets||[]).slice();
   g('cfgUrl').value = c.cfgUrl||'';
   g('cfgInterval').value = c.cfgInterval||'1h';
   g('cfgMerge').value = c.cfgMerge || 'replace';
@@ -559,6 +567,7 @@ async function loadSettings(){
   g('keyRotKey').textContent = pend;
   g('keyRotBanner').style.display = pend ? '' : 'none';
   renderApps();
+  renderManagedSubnets();
   loadProcs();
   loadCfgStatus();
 }
@@ -584,7 +593,7 @@ async function loadProcs(){
   dl.innerHTML = names.map(n=>'<option value="'+escapeHtml(n)+'">').join('');
 }
 document.getElementById('btnReloadProc').onclick = loadProcs;
-g('cfgMerge').onchange = renderApps;
+g('cfgMerge').onchange = ()=>{ renderApps(); renderManagedSubnets(); };
 document.getElementById('btnBrowse').onclick = async ()=>{ const p = await call('appBrowseExe'); if(p){ const i=document.getElementById('fApp'); i.value = p; i.focus(); } };
 document.getElementById('btnAddApp').onclick = ()=>{ const i=document.getElementById('fApp'); const v=(i.value||'').trim(); if(v){ apps.push(v); i.value=''; renderApps(); } };
 document.getElementById('fApp').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); document.getElementById('btnAddApp').click(); }});

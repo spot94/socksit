@@ -102,7 +102,7 @@ func Generate(c *config.Config) (*Config, error) {
 		{IPIsPrivate: true, Action: "route", Outbound: tagDirect},
 	}
 	// User-chosen bypass subnets always go direct (before the per-app rule).
-	if subnets := trimAll(c.DirectSubnets); len(subnets) > 0 {
+	if subnets := trimAll(c.EffectiveSubnets()); len(subnets) > 0 {
 		rules = append(rules, RouteRule{IPCIDR: subnets, Action: "route", Outbound: tagDirect})
 	}
 	appOutbound := tagProxy
