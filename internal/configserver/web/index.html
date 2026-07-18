@@ -94,10 +94,11 @@
             <label class="fld">Port<input type="number" id="fPort" value="1080"></label>
             <label class="fld">Mode<select id="fMode"><option value="allowlist">allowlist</option><option value="blocklist">blocklist</option></select></label>
           </div>
-          <div class="row" style="margin-top:10px;gap:22px">
-            <label class="switch"><input type="checkbox" id="fUdp" checked> Proxy UDP</label>
-            <label class="switch"><input type="checkbox" id="fKill" checked> Kill-switch</label>
+          <div class="grid">
+            <label class="fld">Kill-switch<select id="fKill"><option value="user">user-defined</option><option value="on">on (forced)</option><option value="off">off (forced)</option></select></label>
+            <label class="fld">Proxy UDP<select id="fUdp"><option value="user">user-defined</option><option value="on">on (forced)</option><option value="off">off (forced)</option></select></label>
           </div>
+          <div class="sub muted" style="margin-top:4px">on/off force the value and lock the toggle on clients; user-defined leaves it to each client.</div>
           <div class="grid" style="margin-top:10px">
             <label class="fld">Apps (one per line)<textarea id="fApps" placeholder="chrome.exe&#10;Telegram.exe"></textarea></label>
             <label class="fld">Direct subnets (one per line)<textarea id="fSubnets" placeholder="192.168.1.0/24"></textarea></label>
@@ -218,7 +219,7 @@ async function selectProfile(name){
   const v = await api('/api/profiles/'+encodeURIComponent(name));
   $('#pName').textContent = name;
   $('#fAddr').value=v.address||''; $('#fPort').value=v.port||1080; $('#fMode').value=v.mode||'allowlist';
-  $('#fUdp').checked=!!v.udp; $('#fKill').checked=!!v.killSwitch;
+  $('#fUdp').value=v.udp||'user'; $('#fKill').value=v.killSwitch||'user';
   $('#fApps').value=(v.apps||[]).join('\n'); $('#fSubnets').value=(v.subnets||[]).join('\n');
   const mg = v.migrate||{};
   $('#mConfigUrl').value=mg.configUrl||''; $('#mMerge').value=mg.merge||''; $('#mUpdEndpoint').value=mg.updateEndpoint||'';
@@ -229,7 +230,7 @@ async function selectProfile(name){
 function collect(){
   const lines = s => (s||'').split('\n').map(x=>x.trim()).filter(Boolean);
   return { address:$('#fAddr').value.trim(), port:parseInt($('#fPort').value||'1080',10), mode:$('#fMode').value,
-    udp:$('#fUdp').checked, killSwitch:$('#fKill').checked,
+    udp:$('#fUdp').value, killSwitch:$('#fKill').value,
     apps:lines($('#fApps').value), subnets:lines($('#fSubnets').value),
     migrate:{ configUrl:$('#mConfigUrl').value.trim(), merge:$('#mMerge').value, updateEndpoint:$('#mUpdEndpoint').value.trim(),
       updateChannel:$('#mUpdChannel').value.trim(), updateMode:$('#mUpdMode').value, pubkey:$('#mPubKey').value.trim() } };
@@ -249,7 +250,7 @@ $('#btnNewProfile').onclick = async () => {
   if(!/^[a-z0-9][a-z0-9-]{0,39}$/.test(name)){ alert('Invalid name.'); return; }
   current = name;
   $('#pName').textContent=name; $('#fAddr').value=''; $('#fPort').value=1080; $('#fMode').value='allowlist';
-  $('#fUdp').checked=true; $('#fKill').checked=true; $('#fApps').value=''; $('#fSubnets').value='';
+  $('#fUdp').value='user'; $('#fKill').value='user'; $('#fApps').value=''; $('#fSubnets').value='';
   $('#mConfigUrl').value=''; $('#mMerge').value=''; $('#mUpdEndpoint').value=''; $('#mUpdChannel').value=''; $('#mUpdMode').value=''; $('#mPubKey').value='';
   show($('#editorCard'),true); banner($('#editBanner'),'info','New profile — fill in and Save & sign.'); renderSnippet();
 };

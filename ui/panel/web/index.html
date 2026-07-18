@@ -104,6 +104,9 @@
   .track::after{content:"";position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;transition:.15s;box-shadow:0 1px 2px #0006}
   .switch input:checked + .track{background:var(--accent)}
   .switch input:checked + .track::after{transform:translateX(19px)}
+  .switch input:disabled + .track{opacity:.45}
+  .switch.locked{opacity:.8;cursor:not-allowed}
+  .lockbadge{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:1px 6px}
 
   .banner{border-radius:9px;padding:10px 13px;font-size:13px;margin-top:12px;display:none;white-space:pre-line}
   .banner.show{display:block}
@@ -211,8 +214,8 @@
           <label class="fld"><span data-i18n="lbl.mode">Mode</span><select id="fMode"><option value="allowlist" data-i18n="opt.allowlist">allowlist — only listed apps</option><option value="blocklist" data-i18n="opt.blocklist">blocklist — all except listed</option></select></label>
           <label class="fld" for="subnetInput"><span data-i18n="lbl.bypass">Bypass subnets</span><div class="chips" id="subnetChips"><input type="text" id="subnetInput" class="chipinput" data-i18n-ph="ph.subnet"></div></label>
           <div class="wide row" style="gap:22px">
-            <label class="switch"><input type="checkbox" id="fKill"><span class="track"></span><span data-i18n="sw.killswitch">Kill-switch</span></label>
-            <label class="switch"><input type="checkbox" id="fUdp"><span class="track"></span><span data-i18n="sw.udp">Proxy UDP</span></label>
+            <label class="switch" id="killSw"><input type="checkbox" id="fKill"><span class="track"></span><span data-i18n="sw.killswitch">Kill-switch</span><span class="lockbadge" id="killLock" style="display:none" data-i18n="cfg.managedTag">managed</span></label>
+            <label class="switch" id="udpSw"><input type="checkbox" id="fUdp"><span class="track"></span><span data-i18n="sw.udp">Proxy UDP</span><span class="lockbadge" id="udpLock" style="display:none" data-i18n="cfg.managedTag">managed</span></label>
             <label class="switch"><input type="checkbox" id="fTray"><span class="track"></span><span data-i18n="sw.tray">Show in tray</span></label>
           </div>
         </div>
@@ -530,6 +533,11 @@ document.getElementById('btnUninstall').onclick = e=>svc('uninstall', e.target);
 document.getElementById('btnTest').onclick = ()=>testProxy(document.getElementById('dashBanner'));
 
 /* ---------- settings ---------- */
+function setLock(inputId, labelId, badgeId, on){
+  g(inputId).disabled = on;
+  g(labelId).classList.toggle('locked', on);
+  g(badgeId).style.display = on ? '' : 'none';
+}
 let apps = [];
 let managedApps = [];
 let managedSubnets = [];
@@ -586,6 +594,9 @@ async function loadSettings(){
   document.getElementById('fKill').checked = !!c.killSwitch;
   document.getElementById('fUdp').checked = !!c.udp;
   document.getElementById('fTray').checked = !!c.showTray;
+  const locked = c.cfgLocked||[];
+  setLock('fKill','killSw','killLock', locked.includes('kill_switch'));
+  setLock('fUdp','udpSw','udpLock', locked.includes('udp'));
   apps = (c.apps||[]).slice();
   managedApps = (c.managedApps||[]).slice();
   managedSubnets = (c.managedSubnets||[]).slice();

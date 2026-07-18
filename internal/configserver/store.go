@@ -116,9 +116,9 @@ type ProfileView struct {
 	Name       string   `json:"name"`
 	Address    string   `json:"address"`
 	Port       int      `json:"port"`
-	UDP        bool     `json:"udp"`
+	UDP        string   `json:"udp"` // "on" | "off" | "user"
 	Mode       string   `json:"mode"`
-	KillSwitch bool     `json:"killSwitch"`
+	KillSwitch string   `json:"killSwitch"` // "on" | "off" | "user"
 	Apps       []string `json:"apps"`
 	Subnets    []string `json:"subnets"`
 	// Migrate optionally proposes channel changes to clients (server moved, key
@@ -167,12 +167,14 @@ type feedConfig struct {
 	// actually clears the managed subnets on clients.
 	DirectSubnets []string `yaml:"direct_subnets"`
 	Mode          string   `yaml:"mode"`
-	KillSwitch    bool     `yaml:"kill_switch"`
+	// kill_switch / udp are tri-state: present (true/false) = server forces it and
+	// the client locks the toggle; absent (nil, via omitempty) = user-defined.
+	KillSwitch *bool `yaml:"kill_switch,omitempty"`
 }
 type feedProxy struct {
 	Address string `yaml:"address"`
 	Port    int    `yaml:"port"`
-	UDP     bool   `yaml:"udp"`
+	UDP     *bool  `yaml:"udp,omitempty"`
 }
 
 func (s *Store) profileDir(name string) string { return filepath.Join(s.dir, "profiles", name) }
@@ -220,9 +222,9 @@ func (s *Store) GetProfile(name string) (*ProfileView, error) {
 		Name:       name,
 		Address:    c.Proxy.Address,
 		Port:       c.Proxy.Port,
-		UDP:        c.UDPEnabled(),
+		UDP:        triState(c.Proxy.UDP),
 		Mode:       c.Mode,
-		KillSwitch: c.KillSwitchOn(),
+		KillSwitch: triState(c.KillSwitch),
 		Apps:       c.Apps,
 		Subnets:    c.DirectSubnets,
 	}
@@ -246,7 +248,10 @@ func (s *Store) SaveProfile(v *ProfileView) error {
 	if err := c.Validate(); err != nil {
 		return err
 	}
-	body, err := yaml.Marshal(feedFromConfig(c))
+	feed := feedFromConfig(c)
+	feed.KillSwitch = triBool(v.KillSwitch)
+	feed.Proxy.UDP = triBool(v.UDP)
+	body, err := yaml.Marshal(feed)
 	if err != nil {
 		return err
 	}
@@ -350,22 +355,46 @@ func (v *ProfileView) toConfig() *config.Config {
 	if v.Port > 0 {
 		c.Proxy.Port = v.Port
 	}
-	udp, ks := v.UDP, v.KillSwitch
-	c.Proxy.UDP = &udp
-	c.KillSwitch = &ks
+	// kill_switch / udp are tri-state and handled at feed-emit time; leave the
+	// validation config at its defaults.
 	c.Mode = v.Mode
 	c.Apps = cleanList(v.Apps)
 	c.DirectSubnets = cleanList(v.Subnets)
 	return c
 }
 
+// triBool maps a tri-state ("on"/"off"/anything-else) to a feed value: on->true,
+// off->false, user-defined->nil (omitted from the feed).
+func triBool(s string) *bool {
+	switch strings.TrimSpace(s) {
+	case "on":
+		t := true
+		return &t
+	case "off":
+		f := false
+		return &f
+	}
+	return nil
+}
+
+// triState is the inverse: nil->"user", true->"on", false->"off".
+func triState(b *bool) string {
+	if b == nil {
+		return "user"
+	}
+	if *b {
+		return "on"
+	}
+	return "off"
+}
+
 func feedFromConfig(c *config.Config) feedConfig {
 	return feedConfig{
-		Proxy:         feedProxy{Address: c.Proxy.Address, Port: c.Proxy.Port, UDP: c.UDPEnabled()},
+		Proxy:         feedProxy{Address: c.Proxy.Address, Port: c.Proxy.Port}, // UDP set by caller (tri-state)
 		Apps:          c.Apps,
 		DirectSubnets: c.DirectSubnets,
 		Mode:          c.Mode,
-		KillSwitch:    c.KillSwitchOn(),
+		// KillSwitch set by caller (tri-state)
 	}
 }
 

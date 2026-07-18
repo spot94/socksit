@@ -138,6 +138,9 @@ func (r *Runtime) fetchConfig(ctx context.Context) (configFetchResult, error) {
 	// migration (server moved / update channel / key rotation).
 	newCfg.Update = cfg.Update
 	newCfg.ConfigSource = cfg.ConfigSource
+	// Fields the feed actually carries (kill_switch / proxy.udp) are server-forced;
+	// record them so the panel can lock those toggles. Absent = user-defined.
+	newCfg.ConfigSource.Locked = lockedFromFeed(body)
 	if cfg.ConfigSigned() && strings.TrimSpace(cfg.ConfigSource.PubKey) != "" {
 		if mig, ok := r.fetchMigrate(cctx, client, cfg); ok {
 			applyMigrate(newCfg, mig, cfg)
@@ -254,6 +257,26 @@ type migrateInstr struct {
 	UpdateEndpoint string `yaml:"update_endpoint"`
 	UpdateChannel  string `yaml:"update_channel"`
 	UpdateMode     string `yaml:"update_mode"`
+}
+
+// lockedFromFeed lists the fields the routing feed carries that the client treats
+// as server-forced (read-only in the panel): kill_switch and proxy.udp. Presence
+// in the feed means forced; absence means user-defined.
+func lockedFromFeed(body []byte) []string {
+	var m map[string]any
+	if yaml.Unmarshal(body, &m) != nil {
+		return nil
+	}
+	var locked []string
+	if _, ok := m["kill_switch"]; ok {
+		locked = append(locked, "kill_switch")
+	}
+	if p, ok := m["proxy"].(map[string]any); ok {
+		if _, ok := p["udp"]; ok {
+			locked = append(locked, "udp")
+		}
+	}
+	return locked
 }
 
 // migrateURLFrom derives the migrate.yaml URL from the config feed URL (same

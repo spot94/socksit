@@ -100,6 +100,11 @@ type ConfigSource struct {
 	// DeclinedPubKey is a proposed rotation the admin declined; the client stops
 	// re-prompting for that exact key until the server proposes a different one.
 	DeclinedPubKey string `yaml:"declined_pubkey,omitempty"`
+	// Locked lists config fields the managed feed forces (currently "kill_switch"
+	// and/or "udp"). Client-local, re-derived from the feed on each fetch; the
+	// panel greys out and disables those toggles so the user can't override a
+	// server-forced value. Empty when the server leaves them user-defined.
+	Locked []string `yaml:"locked,omitempty"`
 }
 
 // Update modes.
@@ -185,6 +190,17 @@ func Default() *Config {
 
 // ConfigManaged reports whether the config is pulled from a remote URL.
 func (c *Config) ConfigManaged() bool { return strings.TrimSpace(c.ConfigSource.URL) != "" }
+
+// IsLocked reports whether the managed feed forces the named field (e.g.
+// "kill_switch", "udp"), which the panel presents read-only.
+func (c *Config) IsLocked(field string) bool {
+	for _, f := range c.ConfigSource.Locked {
+		if f == field {
+			return true
+		}
+	}
+	return false
+}
 
 // ConfigSigned reports the effective signature requirement (default true).
 func (c *Config) ConfigSigned() bool { return c.ConfigSource.Signed == nil || *c.ConfigSource.Signed }
