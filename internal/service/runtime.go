@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"socksit/internal/audit"
 	"socksit/internal/config"
 	"socksit/internal/engine"
@@ -230,6 +232,14 @@ func (r *Runtime) effectiveConfig() (*config.Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	// If the config left managed mode (url cleared) but channel remnants remain
+	// — e.g. the file was edited directly — normalize it once and persist the
+	// creds-free file (before injecting credentials, so they never hit the YAML).
+	if cfg.DemoteIfUnmanaged() {
+		if b, mErr := yaml.Marshal(cfg); mErr == nil {
+			_ = os.WriteFile(r.configPath(), b, 0o600)
+		}
+	}
 	if u, p, ok := r.loadCreds(); ok {
 		cfg.Proxy.Username, cfg.Proxy.Password = u, p
 		if err := cfg.Validate(); err != nil {
@@ -337,10 +347,19 @@ func (r *Runtime) GetConfig() (string, error) {
 }
 
 func (r *Runtime) SetConfig(yamlText string) error {
-	if _, err := config.Parse([]byte(yamlText)); err != nil {
+	cfg, err := config.Parse([]byte(yamlText))
+	if err != nil {
 		return err // reject invalid edits without touching the running config
 	}
-	if err := os.WriteFile(r.configPath(), []byte(yamlText), 0o600); err != nil {
+	// Clearing config_source.url in an edit means "go local": drop channel
+	// remnants and unlock server-forced toggles before persisting.
+	out := []byte(yamlText)
+	if cfg.DemoteIfUnmanaged() {
+		if b, mErr := yaml.Marshal(cfg); mErr == nil {
+			out = b
+		}
+	}
+	if err := os.WriteFile(r.configPath(), out, 0o600); err != nil {
 		return err
 	}
 	r.signalRestart()

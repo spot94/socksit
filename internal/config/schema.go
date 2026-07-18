@@ -246,6 +246,31 @@ func (c *Config) EffectiveSubnets() []string {
 	return c.DirectSubnets
 }
 
+// DemoteIfUnmanaged normalizes a config that has left managed mode — i.e.
+// config_source.url is empty but channel state lingers. It drops the
+// feed-contributed managed_apps/managed_subnets (Drop policy: only the user's
+// own apps/subnets survive) and clears the config_source trust/lock state
+// (pubkey, pending/declined key, locked), so stale server-forced toggles no
+// longer freeze in the panel and no dead trust anchor remains. It returns
+// whether it changed anything and is idempotent. A managed config (url set) is
+// never touched.
+func (c *Config) DemoteIfUnmanaged() bool {
+	if strings.TrimSpace(c.ConfigSource.URL) != "" {
+		return false
+	}
+	changed := false
+	if len(c.ManagedApps) > 0 || len(c.ManagedSubnets) > 0 {
+		c.ManagedApps, c.ManagedSubnets = nil, nil
+		changed = true
+	}
+	cs := &c.ConfigSource
+	if cs.PubKey != "" || cs.PendingPubKey != "" || cs.DeclinedPubKey != "" || len(cs.Locked) > 0 {
+		cs.PubKey, cs.PendingPubKey, cs.DeclinedPubKey, cs.Locked = "", "", "", nil
+		changed = true
+	}
+	return changed
+}
+
 // dedupeList concatenates lists dropping blanks and case-insensitive duplicates,
 // preserving first-seen order.
 func dedupeList(lists ...[]string) []string {

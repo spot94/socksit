@@ -157,6 +157,15 @@ Clients fetch on start and on their interval, verify the signature against
 `pubkey`, and apply it. Rotating the key re-signs every profile — update every
 client's `pubkey` afterwards.
 
+**Leaving managed mode.** Clearing `config_source.url` on a client returns it to
+local control. The client then **drops** the channel-contributed apps and subnets
+(`managed_apps` / `managed_subnets`) and clears the server-forced toggle locks
+(`config_source.locked`) and the trusted key — so the panel's kill-switch / UDP
+toggles unlock and no dead trust anchor lingers. Only the user's own apps and
+subnets remain (in override mode the channel's apps stop being routed; the user's
+own are untouched). This normalization happens when the edit is saved and, as a
+backstop, on the next service start if the file was edited directly.
+
 ## Migration (server moved / key rotation)
 
 Each profile has an optional **Migration** block, served as a signed
