@@ -51,14 +51,17 @@
   .nav a .ico{width:18px;text-align:center;opacity:.9}
   .nav a:hover{background:var(--panel-2);color:var(--text)}
   .nav a.active{background:var(--accent-weak);color:var(--accent)}
-  .side .foot{margin-top:auto;display:flex;align-items:center;gap:8px;padding:8px 6px 2px}
+  .side .foot{margin-top:auto;display:flex;flex-direction:column;gap:10px;padding:12px 6px 2px;
+    border-top:1px solid var(--border)}
   .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:0 0 auto}
   .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.bad{background:var(--bad)}
-  .sidestat{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;overflow:hidden;flex:1;min-width:0}
+  .sidestat{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;overflow:hidden;min-width:0}
   .sidestat span.txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .themebtn,.langsel{border:1px solid var(--border);background:var(--panel-2);color:var(--muted);border-radius:8px;cursor:pointer}
-  .themebtn{padding:6px 8px;font-size:14px}
-  .langsel{padding:5px 6px;font-size:12px;font-weight:600}
+  .foot-controls{display:flex;align-items:center;gap:8px}
+  .themebtn,.langsel{border:1px solid var(--border);background:var(--panel-2);color:var(--muted);
+    border-radius:8px;cursor:pointer;height:30px;box-sizing:border-box}
+  .themebtn{width:34px;padding:0;font-size:15px;display:inline-flex;align-items:center;justify-content:center}
+  .langsel{padding:0 8px;font-size:12px;font-weight:600}
   .themebtn:hover,.langsel:hover{color:var(--text)}
 
   /* main */
@@ -145,11 +148,13 @@
     </nav>
     <div class="foot">
       <div class="sidestat"><span class="dot" id="sideDot"></span><span class="txt" id="sideStat">…</span></div>
-      <select id="langSel" class="langsel" data-i18n-title="lang.title">
-        <option value="en">EN</option>
-        <option value="ru">RU</option>
-      </select>
-      <button class="themebtn" id="themeBtn" data-i18n-title="theme.title">◐</button>
+      <div class="foot-controls">
+        <select id="langSel" class="langsel" data-i18n-title="lang.title">
+          <option value="en">EN</option>
+          <option value="ru">RU</option>
+        </select>
+        <button class="themebtn" id="themeBtn" data-i18n-title="theme.title">◐</button>
+      </div>
     </div>
   </aside>
 
