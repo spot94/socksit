@@ -10,17 +10,18 @@ import (
 //go:embed web/index.html
 var indexHTML []byte
 
-// Server wires the store, auth and audit log to HTTP routes.
+// Server wires the store, auth, audit log and LDAP to HTTP routes.
 type Server struct {
 	store *Store
 	auth  *Auth
 	audit *Audit
+	ldap  *LDAP
 	mux   *http.ServeMux
 }
 
 // New builds the router.
-func New(store *Store, auth *Auth, audit *Audit) *Server {
-	s := &Server{store: store, auth: auth, audit: audit, mux: http.NewServeMux()}
+func New(store *Store, auth *Auth, audit *Audit, ldap *LDAP) *Server {
+	s := &Server{store: store, auth: auth, audit: audit, ldap: ldap, mux: http.NewServeMux()}
 	// Public feed (integrity via signature, no auth).
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	s.mux.HandleFunc("GET /configs/{name}/socksit.yaml", s.serveConfig)
@@ -32,16 +33,22 @@ func New(store *Store, auth *Auth, audit *Audit) *Server {
 	s.mux.HandleFunc("GET /api/session", s.handleSession)
 	s.mux.HandleFunc("POST /api/setup", s.handleSetup)
 	s.mux.HandleFunc("POST /api/login", s.handleLogin)
+	s.mux.HandleFunc("POST /api/ldap-login", s.handleLDAPLogin)
 	s.mux.HandleFunc("POST /api/logout", s.handleLogout)
-	// Admin API (auth + CSRF via requireAuth).
+	// Both roles: profiles (operator can't touch migration — enforced in the
+	// handler) and reading the public key (needed for the client snippet).
 	s.mux.HandleFunc("GET /api/profiles", auth.requireAuth(s.handleListProfiles))
 	s.mux.HandleFunc("GET /api/profiles/{name}", auth.requireAuth(s.handleGetProfile))
 	s.mux.HandleFunc("POST /api/profiles/{name}", auth.requireAuth(s.handleSaveProfile))
 	s.mux.HandleFunc("DELETE /api/profiles/{name}", auth.requireAuth(s.handleDeleteProfile))
 	s.mux.HandleFunc("GET /api/key", auth.requireAuth(s.handleGetKey))
-	s.mux.HandleFunc("POST /api/key/generate", auth.requireAuth(s.handleGenerateKey))
-	s.mux.HandleFunc("POST /api/key/import", auth.requireAuth(s.handleImportKey))
-	s.mux.HandleFunc("GET /api/audit", auth.requireAuth(s.handleAudit))
+	// Administrator only: key management, audit, LDAP configuration.
+	s.mux.HandleFunc("POST /api/key/generate", auth.requireAdmin(s.handleGenerateKey))
+	s.mux.HandleFunc("POST /api/key/import", auth.requireAdmin(s.handleImportKey))
+	s.mux.HandleFunc("GET /api/audit", auth.requireAdmin(s.handleAudit))
+	s.mux.HandleFunc("GET /api/ldap", auth.requireAdmin(s.handleGetLDAP))
+	s.mux.HandleFunc("POST /api/ldap", auth.requireAdmin(s.handleSaveLDAP))
+	s.mux.HandleFunc("POST /api/ldap/test", auth.requireAdmin(s.handleTestLDAP))
 	return s
 }
 
@@ -112,12 +119,41 @@ func (s *Server) serveUI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
-	resp := map[string]any{"hasAdmin": s.auth.HasAdmin(), "authenticated": false}
+	resp := map[string]any{"hasAdmin": s.auth.HasAdmin(), "authenticated": false, "ldapEnabled": s.ldap.Enabled()}
 	if sess := s.auth.validate(r); sess != nil {
 		resp["authenticated"] = true
 		resp["csrf"] = sess.csrf
+		resp["role"] = sess.role
+		resp["display"] = sess.display
+		resp["kind"] = sess.kind
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleLDAPLogin(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if !readJSON(w, r, &in) {
+		return
+	}
+	ip := clientIP(r)
+	if s.auth.LockedOut(ip) {
+		http.Error(w, "too many attempts — try again later", http.StatusUnauthorized)
+		return
+	}
+	role, display, err := s.ldap.Authenticate(strings.TrimSpace(in.Username), in.Password)
+	if err != nil {
+		s.auth.Fail(ip)
+		s.audit.Log(strings.TrimSpace(in.Username), "failed LDAP login", "-", ip)
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+	token, csrf := s.auth.StartSession(ip, role, display, "ldap")
+	s.auth.setSessionCookie(w, token)
+	s.audit.Log(display, "LDAP login ("+role+")", "-", ip)
+	writeJSON(w, http.StatusOK, map[string]any{"csrf": csrf, "role": role, "display": display})
 }
 
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {

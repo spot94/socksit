@@ -33,7 +33,11 @@ func main() {
 		log.Fatalf("init auth: %v", err)
 	}
 	audit := configserver.NewAudit(dataDir)
-	srv := configserver.New(store, auth, audit)
+	ldap, err := configserver.NewLDAP(dataDir)
+	if err != nil {
+		log.Fatalf("init ldap: %v", err)
+	}
+	srv := configserver.New(store, auth, audit, ldap)
 
 	httpSrv := &http.Server{
 		Addr:              addr,

@@ -13,7 +13,9 @@ container itself).
   - `GET /configs/<profile>/socksit.yaml.sig`
   - `GET /healthz`
 - **Admin (login required):** create/edit/delete named profiles, generate/import/
-  rotate the signing key, view the audit log.
+  rotate the signing key, view the audit log, configure LDAP. Two roles —
+  **Administrator** (everything) and **Operator** (routing only) — see
+  [Authentication & roles](#authentication--roles) below.
 
 Each **profile** is an independent feed at its own URL (e.g. `team-a`, `team-b`)
 with its own app set — different groups get different configs. All profiles are
@@ -81,6 +83,57 @@ Open the URL. If `ADMIN_PASSWORD` was set, log in with it; otherwise the first-r
 page prompts you to create the admin password (min 10 chars). Sessions are
 cookie-based (HttpOnly, SameSite=Strict, Secure in prod) with CSRF tokens on
 mutating requests and brute-force lockout on the login.
+
+## Authentication & roles
+
+There are two ways to sign in and two roles:
+
+- **Local administrator** — the bootstrap account from first-run (always available,
+  cannot be disabled). Always has the **Administrator** role.
+- **LDAP** — optional, configured in the **LDAP** section of the admin UI (only the
+  local admin, or an LDAP administrator, can open it). Meant for Active Directory.
+
+**Roles.**
+
+| | Administrator | Operator |
+|---|---|---|
+| Edit profiles (proxy/apps/subnets/mode/kill-switch) | ✓ | ✓ |
+| Signing-key generate/import/rotate | ✓ | — |
+| Per-profile **Migration** block | ✓ | — |
+| Audit log | ✓ | — |
+| LDAP configuration | ✓ | — |
+
+The Operator restrictions are enforced **server-side** (the key/audit/LDAP endpoints
+require the Administrator role → `403`; a Save from an operator keeps the profile's
+existing migration untouched), and mirrored in the UI (those nav items and the
+migration editor are hidden). The local admin is always an Administrator, so an
+LDAP misconfiguration can never lock you out of key/LDAP management.
+
+### LDAP setup (Active Directory)
+
+Open **LDAP** in the sidebar (Administrator only) and fill in:
+
+| Field | Example | Notes |
+|-------|---------|-------|
+| Enabled | on | when on, the login page shows an **LDAP** tab next to **Local admin** |
+| URL | `ldaps://dc.corp.local:636` | `ldap://` or `ldaps://`; StartTLS toggle for `ldap://:389` |
+| Skip TLS verify | off | only for lab CAs; leave off in prod |
+| Bind DN / password | `CN=svc-socksit,OU=Svc,DC=corp,DC=local` | a **service account** used to search for users; the password is write-only (never returned by the API) |
+| Base DN | `DC=corp,DC=local` | subtree searched for the user |
+| User filter | `(sAMAccountName={user})` | must contain `{user}` — replaced (escaped) with the typed username |
+| Administrator filter | `(memberOf=CN=SocksIt-Admins,OU=Groups,DC=corp,DC=local)` | matched against the found user's own entry |
+| Operator filter | `(memberOf=CN=SocksIt-Operators,OU=Groups,DC=corp,DC=local)` | matched the same way |
+| Display attribute | `displayName` | shown next to **Log out** for LDAP users |
+
+Login flow (service-account bind): the server binds as the service account, searches
+Base DN with the user filter, **re-binds as the user** to verify the password, then
+decides the role — Administrator filter first, else Operator filter; a user matching
+neither is refused. **Test connection** does a service bind without touching a user.
+
+The LDAP config (including the bind password) is stored in `ldap.json` on the `/data`
+volume (`0600`) — treat that volume as secret. Failed LDAP logins share the same
+per-IP brute-force lockout as the local login. The signed-in identity (local admin
+name or LDAP `displayName`, plus a role badge) is shown next to **Log out**.
 
 ## Set up a feed
 

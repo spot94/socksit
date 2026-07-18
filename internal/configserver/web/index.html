@@ -61,6 +61,11 @@
   .mini{padding:5px 8px;font-size:12px;border-radius:8px;color:var(--muted)}
   .mini:hover{color:var(--text)}
   .side .foot .ctlrow{display:flex;gap:8px;margin-bottom:10px}
+  .userline{display:flex;align-items:center;gap:8px;padding:0 4px 10px;font-size:12.5px;overflow:hidden}
+  .userline .un{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+  .authtabs{display:flex;gap:6px;margin-bottom:12px}
+  .authtabs .atab{flex:1;padding:7px 8px;font-size:12.5px;background:var(--panel-2);color:var(--muted)}
+  .authtabs .atab.active{background:var(--accent-weak);color:var(--accent);border-color:var(--accent)}
   .plist a.add{color:var(--accent);font-weight:500;display:flex;align-items:center;gap:7px;margin-top:2px}
   .plist a.add:hover{background:var(--accent-weak)}
   .plist a.add .plus{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1px solid var(--accent);font-size:13px;line-height:1;flex:0 0 auto}
@@ -74,6 +79,11 @@
     <svg class="authlogo" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="8" fill="#0e7c86"/><circle cx="9" cy="23" r="3" fill="#fff"/><path d="M9 23 L21 11" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M15 11 H21 V17" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
     <h1 id="authTitle" style="text-align:center">Sign in</h1>
     <div class="sub" id="authSub">Config server administration</div>
+    <div class="authtabs" id="authTabs" style="display:none">
+      <button class="atab active" data-tab="ldap" data-i18n="auth.tabLdap">LDAP</button>
+      <button class="atab" data-tab="local" data-i18n="auth.tabLocal">Local admin</button>
+    </div>
+    <label class="fld" id="userField" style="display:none"><span data-i18n="auth.username">Username</span><input type="text" id="authUser" autocomplete="username"></label>
     <label class="fld"><span data-i18n="auth.password">Password</span><input type="password" id="authPw" autocomplete="current-password"></label>
     <div class="banner" id="authBanner"></div>
     <div class="row" style="margin-top:12px"><button class="primary" id="authBtn" style="flex:1">Sign in</button></div>
@@ -87,8 +97,10 @@
       <a data-sec="profiles" class="active" data-i18n="nav.profiles">Profiles</a>
       <a data-sec="key" data-i18n="nav.key">Signing key</a>
       <a data-sec="audit" data-i18n="nav.audit">Audit log</a>
+      <a data-sec="ldap" data-i18n="nav.ldap">LDAP</a>
     </nav>
     <div class="foot">
+      <div class="userline" id="userLine" style="display:none"><span class="un" id="userName"></span><span class="pill" id="userRole"></span></div>
       <div class="ctlrow">
         <select id="langSel" class="mini" data-i18n-title="ctl.lang" style="flex:1"><option value="en">EN</option><option value="ru">RU</option></select>
         <button id="themeBtn" class="mini" data-i18n-title="ctl.theme">◐</button>
@@ -120,6 +132,7 @@
           </div>
           <div class="banner" id="editBanner"></div>
           <div class="row" style="margin-top:12px"><button class="primary" id="btnSaveProfile" data-i18n="btn.saveSign">Save &amp; sign</button><button class="danger" id="btnDeleteProfile" data-i18n="btn.delete">Delete</button></div>
+          <div id="migrationBlock">
           <h3 style="margin-top:16px" data-i18n="h.migration">Migration (optional) — pushed to clients</h3>
           <div class="sub muted" data-i18n="hint.migration">Leave a field empty to keep it unchanged; clear everything to remove the migration.</div>
 
@@ -141,6 +154,7 @@
               <label class="fld"><span data-i18n="lbl.updMode">Update mode</span><select id="mUpdMode"><option value="" data-i18n="opt.unchanged">(unchanged)</option><option value="off">off</option><option value="notify">notify</option><option value="auto">auto</option></select></label>
             </div>
             <div class="sub muted" style="margin-top:6px" data-i18n="hint.updateChannel">Applied automatically; app binaries are still verified against the built-in update key.</div>
+          </div>
           </div>
           <h3 style="margin-top:16px" data-i18n="h.snippet">Client snippet (config_source)</h3>
           <div class="snippet" id="snippet">—</div>
@@ -168,6 +182,28 @@
       <div class="head"><h1 data-i18n="nav.audit">Audit log</h1><button id="btnReloadAudit" data-i18n="btn.refresh">Refresh</button></div>
       <div class="card"><table><thead><tr><th data-i18n="th.time">Time (UTC)</th><th data-i18n="th.action">Action</th><th data-i18n="th.object">Object</th><th data-i18n="th.ip">IP</th></tr></thead><tbody id="auditBody"></tbody></table></div>
     </section>
+
+    <section class="section" id="sec-ldap">
+      <div class="head"><h1 data-i18n="nav.ldap">LDAP</h1></div>
+      <div class="card">
+        <label class="switch"><input type="checkbox" id="lEnabled"><span data-i18n="ldap.enabled">Enable LDAP login</span></label>
+        <div class="sub muted" style="margin-top:4px" data-i18n="ldap.hint">Users signing in via LDAP are mapped to Administrator or Operator by the filters below (matched against their own directory entry). The service account is used to search; a user's password is verified by binding as that user.</div>
+        <div class="grid" style="margin-top:10px">
+          <label class="fld wide"><span data-i18n="ldap.url">Server URL</span><input type="text" id="lUrl" placeholder="ldaps://dc.corp.local:636"></label>
+          <label class="switch"><input type="checkbox" id="lStartTLS"><span data-i18n="ldap.startTLS">StartTLS (for ldap://)</span></label>
+          <label class="switch"><input type="checkbox" id="lSkip"><span data-i18n="ldap.skipVerify">Skip TLS verify</span></label>
+          <label class="fld wide"><span data-i18n="ldap.bindDN">Service account (bind DN)</span><input type="text" id="lBindDN" class="mono" placeholder="CN=svc-socksit,OU=Service,DC=corp,DC=local"></label>
+          <label class="fld wide"><span data-i18n="ldap.bindPw">Service password</span><input type="password" id="lBindPw" data-i18n-ph="ldap.bindPwPh"></label>
+          <label class="fld wide"><span data-i18n="ldap.baseDN">Base DN</span><input type="text" id="lBaseDN" class="mono" placeholder="DC=corp,DC=local"></label>
+          <label class="fld wide"><span data-i18n="ldap.userFilter">User filter</span><input type="text" id="lUserFilter" class="mono" placeholder="(sAMAccountName={user})"></label>
+          <label class="fld wide"><span data-i18n="ldap.adminFilter">Administrator filter</span><input type="text" id="lAdminFilter" class="mono" placeholder="(memberOf=CN=SocksItAdmins,OU=Groups,DC=corp,DC=local)"></label>
+          <label class="fld wide"><span data-i18n="ldap.operatorFilter">Operator filter</span><input type="text" id="lOperatorFilter" class="mono" placeholder="(memberOf=CN=SocksItOperators,OU=Groups,DC=corp,DC=local)"></label>
+          <label class="fld"><span data-i18n="ldap.displayAttr">Display name attribute</span><input type="text" id="lDisplayAttr" placeholder="displayName"></label>
+        </div>
+        <div class="row" style="margin-top:12px"><button class="primary" id="btnSaveLdap" data-i18n="ldap.save">Save</button><button id="btnTestLdap" data-i18n="ldap.test">Test connection</button></div>
+        <div class="banner" id="ldapBanner"></div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -177,8 +213,9 @@ const I18N = {
     'ctl.lang':'Language','ctl.theme':'Theme',
     'auth.signin':'Sign in','auth.createAdmin':'Create admin',
     'auth.subLogin':'Config server administration','auth.subSetup':'Set the first-run administrator password.',
-    'auth.password':'Password',
-    'nav.profiles':'Profiles','nav.key':'Signing key','nav.audit':'Audit log','btn.logout':'Log out',
+    'auth.password':'Password','auth.tabLdap':'LDAP','auth.tabLocal':'Local admin','auth.username':'Username','auth.localAdmin':'Local administrator','role.admin':'Administrator','role.operator':'Operator',
+    'ldap.enabled':'Enable LDAP login','ldap.hint':'Users signing in via LDAP are mapped to Administrator or Operator by the filters below (matched against their own directory entry). The service account searches for the user; the password is verified by binding as that user.','ldap.url':'Server URL','ldap.startTLS':'StartTLS (for ldap://)','ldap.skipVerify':'Skip TLS verify','ldap.bindDN':'Service account (bind DN)','ldap.bindPw':'Service password','ldap.bindPwPh':'leave blank to keep current','ldap.baseDN':'Base DN','ldap.userFilter':'User filter','ldap.adminFilter':'Administrator filter','ldap.operatorFilter':'Operator filter','ldap.displayAttr':'Display name attribute','ldap.save':'Save','ldap.test':'Test connection','ldap.saved':'Saved.','ldap.testOk':'Connection OK.',
+    'nav.profiles':'Profiles','nav.key':'Signing key','nav.audit':'Audit log','nav.ldap':'LDAP','btn.logout':'Log out',
     'btn.newProfile':'New profile','h.editProfile':'Edit profile',
     'lbl.address':'Proxy address','lbl.port':'Port','lbl.mode':'Mode','lbl.kill':'Kill-switch','lbl.udp':'Proxy UDP',
     'opt.user':'user-defined','opt.onForced':'on (forced)','opt.offForced':'off (forced)',
@@ -208,8 +245,9 @@ const I18N = {
     'ctl.lang':'Язык','ctl.theme':'Тема',
     'auth.signin':'Вход','auth.createAdmin':'Создать администратора',
     'auth.subLogin':'Администрирование сервера конфигов','auth.subSetup':'Задайте пароль администратора при первом запуске.',
-    'auth.password':'Пароль',
-    'nav.profiles':'Профили','nav.key':'Ключ подписи','nav.audit':'Аудит','btn.logout':'Выйти',
+    'auth.password':'Пароль','auth.tabLdap':'LDAP','auth.tabLocal':'Локальный админ','auth.username':'Имя пользователя','auth.localAdmin':'Локальный администратор','role.admin':'Администратор','role.operator':'Оператор',
+    'ldap.enabled':'Включить вход через LDAP','ldap.hint':'Пользователи, входящие через LDAP, распределяются на Администратора или Оператора по фильтрам ниже (проверяются против их записи в каталоге). Сервис-аккаунт ищет пользователя; пароль проверяется привязкой от его имени.','ldap.url':'URL сервера','ldap.startTLS':'StartTLS (для ldap://)','ldap.skipVerify':'Не проверять TLS-сертификат','ldap.bindDN':'Сервис-аккаунт (bind DN)','ldap.bindPw':'Пароль сервис-аккаунта','ldap.bindPwPh':'пусто — оставить текущий','ldap.baseDN':'Base DN','ldap.userFilter':'Фильтр пользователя','ldap.adminFilter':'Фильтр администраторов','ldap.operatorFilter':'Фильтр операторов','ldap.displayAttr':'Атрибут имени','ldap.save':'Сохранить','ldap.test':'Проверить подключение','ldap.saved':'Сохранено.','ldap.testOk':'Подключение успешно.',
+    'nav.profiles':'Профили','nav.key':'Ключ подписи','nav.audit':'Аудит','nav.ldap':'LDAP','btn.logout':'Выйти',
     'btn.newProfile':'Новый профиль','h.editProfile':'Редактирование профиля',
     'lbl.address':'Адрес прокси','lbl.port':'Порт','lbl.mode':'Режим','lbl.kill':'Kill-switch','lbl.udp':'Проксировать UDP',
     'opt.user':'по выбору клиента','opt.onForced':'вкл (форс)','opt.offForced':'выкл (форс)',
@@ -246,8 +284,10 @@ function applyAuthText(){
 function applyLang(l){
   lang = l; document.documentElement.setAttribute('lang', l);
   document.querySelectorAll('[data-i18n]').forEach(e=>e.textContent = t(e.getAttribute('data-i18n')));
+  document.querySelectorAll('[data-i18n-ph]').forEach(e=>e.setAttribute('placeholder', t(e.getAttribute('data-i18n-ph'))));
   document.querySelectorAll('[data-i18n-title]').forEach(e=>e.setAttribute('title', t(e.getAttribute('data-i18n-title'))));
   applyAuthText(); renderSnippet();
+  if(document.getElementById('screen-app').style.display!=='none') showUser();
   try{ localStorage.setItem('cs.lang', l); }catch(e){}
 }
 function applyTheme(th){
@@ -276,26 +316,56 @@ function banner(el, kind, msg){ el.className='banner '+kind; el.textContent=msg;
 
 /* ---- auth flow ---- */
 let mode = 'login';
+let sessRole='admin', sessDisplay='', sessKind='', ldapEnabled=false, authTab='local';
 async function boot(){
   const s = await api('/api/session');
-  if(s.authenticated){ csrf = s.csrf; enterApp(); return; }
+  ldapEnabled = !!s.ldapEnabled;
+  if(s.authenticated){ csrf = s.csrf; await enterApp(); return; }
   mode = s.hasAdmin ? 'login' : 'setup';
-  applyAuthText();
-  $('#authPw').setAttribute('autocomplete', mode==='setup'?'new-password':'current-password');
+  authTab = (ldapEnabled && mode!=='setup') ? 'ldap' : 'local';
+  setupAuthUI();
   show($('#screen-auth'), true); show($('#screen-app'), false);
-  $('#authPw').focus();
+  (authTab==='ldap' ? $('#authUser') : $('#authPw')).focus();
 }
+function setupAuthUI(){
+  applyAuthText();
+  const showTabs = ldapEnabled && mode!=='setup';
+  $('#authTabs').style.display = showTabs ? '' : 'none';
+  document.querySelectorAll('.atab').forEach(b=>b.classList.toggle('active', b.dataset.tab===authTab));
+  $('#userField').style.display = (showTabs && authTab==='ldap') ? '' : 'none';
+  $('#authPw').setAttribute('autocomplete', mode==='setup'?'new-password':'current-password');
+}
+document.querySelectorAll('.atab').forEach(b=>b.onclick=()=>{ authTab=b.dataset.tab; setupAuthUI(); (authTab==='ldap'?$('#authUser'):$('#authPw')).focus(); });
 $('#authBtn').onclick = async () => {
-  const pw = $('#authPw').value;
   try{
-    const r = await api(mode==='setup'?'/api/setup':'/api/login', 'POST', {password:pw});
-    csrf = r.csrf; enterApp();
+    let r;
+    if(mode==='setup') r = await api('/api/setup','POST',{password:$('#authPw').value});
+    else if(ldapEnabled && authTab==='ldap') r = await api('/api/ldap-login','POST',{username:$('#authUser').value.trim(), password:$('#authPw').value});
+    else r = await api('/api/login','POST',{password:$('#authPw').value});
+    csrf = r.csrf; await enterApp();
   }catch(e){ banner($('#authBanner'),'err', e.message); }
 };
 $('#authPw').addEventListener('keydown', e=>{ if(e.key==='Enter') $('#authBtn').click(); });
+$('#authUser') && $('#authUser').addEventListener('keydown', e=>{ if(e.key==='Enter') $('#authPw').focus(); });
 $('#btnLogout').onclick = async () => { try{ await api('/api/logout','POST',{}); }catch(_){}; location.reload(); };
 
-function enterApp(){ show($('#screen-auth'), false); show($('#screen-app'), true); loadProfiles(); loadKey(); }
+async function enterApp(){
+  const s = await api('/api/session');
+  csrf = s.csrf || csrf; sessRole = s.role||'admin'; sessDisplay = s.display||''; sessKind = s.kind||'';
+  applyRole(); showUser();
+  show($('#screen-auth'), false); show($('#screen-app'), true);
+  loadProfiles(); loadKey();
+}
+function applyRole(){
+  const op = sessRole==='operator';
+  document.querySelectorAll('#nav a[data-sec="key"], #nav a[data-sec="audit"], #nav a[data-sec="ldap"]').forEach(a=>a.style.display = op ? 'none' : '');
+  const mb=document.getElementById('migrationBlock'); if(mb) mb.style.display = op ? 'none' : '';
+}
+function showUser(){
+  document.getElementById('userName').textContent = sessKind==='ldap' ? sessDisplay : t('auth.localAdmin');
+  document.getElementById('userRole').textContent = sessRole==='operator' ? t('role.operator') : t('role.admin');
+  document.getElementById('userLine').style.display='';
+}
 
 /* ---- nav ---- */
 document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>{
@@ -303,8 +373,28 @@ document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>{
   const sec=a.dataset.sec;
   document.querySelectorAll('.section').forEach(x=>x.classList.remove('active'));
   $('#sec-'+sec).classList.add('active');
-  if(sec==='audit') loadAudit(); if(sec==='key') loadKey();
+  if(sec==='audit') loadAudit(); if(sec==='key') loadKey(); if(sec==='ldap') loadLdap();
 });
+
+/* ---- LDAP ---- */
+async function loadLdap(){
+  const c = await api('/api/ldap');
+  $('#lEnabled').checked=!!c.enabled; $('#lUrl').value=c.url||''; $('#lStartTLS').checked=!!c.startTLS; $('#lSkip').checked=!!c.insecureSkipVerify;
+  $('#lBindDN').value=c.bindDN||''; $('#lBindPw').value=''; $('#lBaseDN').value=c.baseDN||'';
+  $('#lUserFilter').value=c.userFilter||''; $('#lAdminFilter').value=c.adminFilter||''; $('#lOperatorFilter').value=c.operatorFilter||''; $('#lDisplayAttr').value=c.displayAttr||'displayName';
+  banner($('#ldapBanner'),'',''); $('#ldapBanner').className='banner';
+}
+$('#btnSaveLdap').onclick = async ()=>{
+  const cfg={ enabled:$('#lEnabled').checked, url:$('#lUrl').value.trim(), startTLS:$('#lStartTLS').checked, insecureSkipVerify:$('#lSkip').checked,
+    bindDN:$('#lBindDN').value.trim(), bindPassword:$('#lBindPw').value, baseDN:$('#lBaseDN').value.trim(),
+    userFilter:$('#lUserFilter').value.trim(), adminFilter:$('#lAdminFilter').value.trim(), operatorFilter:$('#lOperatorFilter').value.trim(), displayAttr:$('#lDisplayAttr').value.trim() };
+  try{ await api('/api/ldap','POST',cfg); ldapEnabled=cfg.enabled; $('#lBindPw').value=''; banner($('#ldapBanner'),'ok',t('ldap.saved')); }
+  catch(e){ banner($('#ldapBanner'),'err',e.message); }
+};
+$('#btnTestLdap').onclick = async ()=>{
+  try{ await api('/api/ldap/test','POST',{}); banner($('#ldapBanner'),'ok',t('ldap.testOk')); }
+  catch(e){ banner($('#ldapBanner'),'err',e.message); }
+};
 
 /* ---- profiles ---- */
 let current = null, pubKey = '';

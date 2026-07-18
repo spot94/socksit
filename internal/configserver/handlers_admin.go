@@ -23,11 +23,20 @@ func (s *Server) handleSaveProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v.Name = r.PathValue("name") // the URL segment is authoritative
+	// Operators can edit routing but not migration: keep the profile's existing
+	// migration regardless of what they submit.
+	if s.auth.roleOf(r) == RoleOperator {
+		if cur, err := s.store.GetProfile(v.Name); err == nil {
+			v.Migrate = cur.Migrate
+		} else {
+			v.Migrate = nil
+		}
+	}
 	if err := s.store.SaveProfile(&v); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	s.audit.Log("admin", "save profile", "profile \""+v.Name+"\"", clientIP(r))
+	s.audit.Log(s.auth.actor(r), "save profile", "profile \""+v.Name+"\"", clientIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -37,7 +46,7 @@ func (s *Server) handleDeleteProfile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	s.audit.Log("admin", "delete profile", "profile \""+name+"\"", clientIP(r))
+	s.audit.Log(s.auth.actor(r), "delete profile", "profile \""+name+"\"", clientIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -51,7 +60,7 @@ func (s *Server) handleGenerateKey(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.audit.Log("admin", "generate signing key", "public "+pub, clientIP(r))
+	s.audit.Log(s.auth.actor(r), "generate signing key", "public "+pub, clientIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{"publicKey": pub})
 }
 
@@ -67,10 +76,42 @@ func (s *Server) handleImportKey(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	s.audit.Log("admin", "import signing key", "public "+pub, clientIP(r))
+	s.audit.Log(s.auth.actor(r), "import signing key", "public "+pub, clientIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{"publicKey": pub})
 }
 
 func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"entries": s.audit.Tail(200)})
+}
+
+func (s *Server) handleGetLDAP(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.ldap.Config()) // bind password blanked
+}
+
+func (s *Server) handleSaveLDAP(w http.ResponseWriter, r *http.Request) {
+	var cfg LDAPConfig
+	if !readJSON(w, r, &cfg) {
+		return
+	}
+	if err := s.ldap.Save(cfg); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.audit.Log(s.auth.actor(r), "save LDAP config (enabled="+boolStr(cfg.Enabled)+")", s.ldap.Config().URL, clientIP(r))
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) handleTestLDAP(w http.ResponseWriter, r *http.Request) {
+	if err := s.ldap.Test(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
 }

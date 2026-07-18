@@ -36,8 +36,11 @@ type Auth struct {
 }
 
 type session struct {
-	expiry time.Time
-	csrf   string
+	expiry  time.Time
+	csrf    string
+	role    string // RoleAdmin | RoleOperator
+	display string // shown next to Log out
+	kind    string // "local" | "ldap"
 }
 
 type failInfo struct {
@@ -94,31 +97,68 @@ func (a *Auth) verifyPassword(pw string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(af.Hash), []byte(pw)) == nil
 }
 
-// Login verifies the password (subject to brute-force lockout) and starts a
-// session, returning the session token and its CSRF token.
+// Login verifies the LOCAL admin password (subject to brute-force lockout) and
+// starts an admin session, returning the session token and its CSRF token.
 func (a *Auth) Login(ip, pw string) (token, csrf string, err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if f := a.fails[ip]; f != nil && time.Now().Before(f.until) {
+	if a.lockedLocked(ip) {
 		return "", "", errors.New("too many attempts — try again later")
 	}
 	if !a.verifyPassword(pw) {
-		f := a.fails[ip]
-		if f == nil {
-			f = &failInfo{}
-			a.fails[ip] = f
-		}
-		f.count++
-		if f.count >= maxLoginFails {
-			f.until = time.Now().Add(lockoutDuration)
-			f.count = 0
-		}
+		a.failLocked(ip)
 		return "", "", errors.New("wrong password")
 	}
 	delete(a.fails, ip)
-	token, csrf = randToken(), randToken()
-	a.sessions[token] = &session{expiry: time.Now().Add(a.idle), csrf: csrf}
+	token, csrf = a.startLocked(RoleAdmin, "Local administrator", "local")
 	return token, csrf, nil
+}
+
+// LockedOut reports whether ip is currently locked out (used before an LDAP bind).
+func (a *Auth) LockedOut(ip string) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lockedLocked(ip)
+}
+
+// Fail records a failed login attempt (LDAP or local) for brute-force tracking.
+func (a *Auth) Fail(ip string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.failLocked(ip)
+}
+
+// StartSession creates a session for an already-authenticated principal (e.g. an
+// LDAP user) and clears the IP's failure counter.
+func (a *Auth) StartSession(ip, role, display, kind string) (token, csrf string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	delete(a.fails, ip)
+	return a.startLocked(role, display, kind)
+}
+
+func (a *Auth) lockedLocked(ip string) bool {
+	f := a.fails[ip]
+	return f != nil && time.Now().Before(f.until)
+}
+
+func (a *Auth) failLocked(ip string) {
+	f := a.fails[ip]
+	if f == nil {
+		f = &failInfo{}
+		a.fails[ip] = f
+	}
+	f.count++
+	if f.count >= maxLoginFails {
+		f.until = time.Now().Add(lockoutDuration)
+		f.count = 0
+	}
+}
+
+func (a *Auth) startLocked(role, display, kind string) (token, csrf string) {
+	token, csrf = randToken(), randToken()
+	a.sessions[token] = &session{expiry: time.Now().Add(a.idle), csrf: csrf, role: role, display: display, kind: kind}
+	return token, csrf
 }
 
 // Logout invalidates the session behind the request.
@@ -186,6 +226,36 @@ func (a *Auth) requireAuth(h http.HandlerFunc) http.HandlerFunc {
 		}
 		h(w, r)
 	}
+}
+
+// requireAdmin is requireAuth plus an Administrator-role check (operators get 403).
+func (a *Auth) requireAdmin(h http.HandlerFunc) http.HandlerFunc {
+	return a.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+		if s := a.validate(r); s == nil || s.role != RoleAdmin {
+			http.Error(w, "administrator role required", http.StatusForbidden)
+			return
+		}
+		h(w, r)
+	})
+}
+
+// roleOf returns the role for the request's session (empty if none).
+func (a *Auth) roleOf(r *http.Request) string {
+	if s := a.validate(r); s != nil {
+		return s.role
+	}
+	return ""
+}
+
+// actor returns a human-readable audit actor for the request's session.
+func (a *Auth) actor(r *http.Request) string {
+	if s := a.validate(r); s != nil {
+		if s.display != "" {
+			return s.display
+		}
+		return s.role
+	}
+	return "?"
 }
 
 func randToken() string {
