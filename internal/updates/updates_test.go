@@ -82,6 +82,9 @@ func TestCompareVersions(t *testing.T) {
 		{"v0.2.0", "0.1.9", 1},
 		{"0.2.0-beta", "0.2.0", 0},
 		{"0.10.0", "0.9.0", 1},
+		{"0.1.1b", "0.1.0", 1},    // non-numeric suffix still compares by 0.1.1
+		{"0.1.1b", "0.1.1", 0},    // "1b" -> 1
+		{"0.1.2", "0.1.0-dev", 1}, // real release vs the unbaked default
 	}
 	for _, c := range cases {
 		if got := compareVersions(c.a, c.b); got != c.want {

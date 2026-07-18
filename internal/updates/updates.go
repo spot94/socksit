@@ -234,7 +234,13 @@ func splitVer(s string) []int {
 	parts := strings.Split(s, ".")
 	out := make([]int, 0, len(parts))
 	for _, p := range parts {
-		n, _ := strconv.Atoi(strings.TrimSpace(p))
+		// Use only the leading digits of each component, so a non-numeric suffix
+		// ("1b" -> 1, "beta" -> 0) doesn't silently collapse the whole version.
+		j := 0
+		for j < len(p) && p[j] >= '0' && p[j] <= '9' {
+			j++
+		}
+		n, _ := strconv.Atoi(p[:j])
 		out = append(out, n)
 	}
 	return out
