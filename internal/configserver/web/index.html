@@ -111,9 +111,10 @@
             <div class="msub">Config channel</div>
             <div class="grid">
               <label class="fld wide">New config URL<input type="text" id="mConfigUrl" placeholder="https://new-host/configs/team-a/socksit.yaml"></label>
+              <label class="fld wide">Apply mode<select id="mMerge"><option value="">(unchanged)</option><option value="replace">Replace — server controls everything</option><option value="override">Override — clients keep their own</option></select></label>
               <label class="fld wide">Rotate trusted key (new pubkey)<input type="text" id="mPubKey" class="mono" placeholder="new base64 Ed25519 public key"></label>
             </div>
-            <div class="sub muted" style="margin-top:6px">URL applies automatically (still guarded by the pinned key). A new trusted key moves the root of trust, so each client's admin must approve it.</div>
+            <div class="sub muted" style="margin-top:6px">URL and apply mode apply automatically (still guarded by the pinned key). Replace = clients take exactly this config; Override = clients keep their own apps/subnets on top. A new trusted key moves the root of trust, so each client's admin must approve it.</div>
           </div>
 
           <div class="mgroup">
@@ -220,7 +221,7 @@ async function selectProfile(name){
   $('#fUdp').checked=!!v.udp; $('#fKill').checked=!!v.killSwitch;
   $('#fApps').value=(v.apps||[]).join('\n'); $('#fSubnets').value=(v.subnets||[]).join('\n');
   const mg = v.migrate||{};
-  $('#mConfigUrl').value=mg.configUrl||''; $('#mUpdEndpoint').value=mg.updateEndpoint||'';
+  $('#mConfigUrl').value=mg.configUrl||''; $('#mMerge').value=mg.merge||''; $('#mUpdEndpoint').value=mg.updateEndpoint||'';
   $('#mUpdChannel').value=mg.updateChannel||''; $('#mUpdMode').value=mg.updateMode||''; $('#mPubKey').value=mg.pubkey||'';
   show($('#editorCard'), true); banner($('#editBanner'),'',''); $('#editBanner').className='banner';
   renderSnippet(); loadProfiles();
@@ -230,7 +231,7 @@ function collect(){
   return { address:$('#fAddr').value.trim(), port:parseInt($('#fPort').value||'1080',10), mode:$('#fMode').value,
     udp:$('#fUdp').checked, killSwitch:$('#fKill').checked,
     apps:lines($('#fApps').value), subnets:lines($('#fSubnets').value),
-    migrate:{ configUrl:$('#mConfigUrl').value.trim(), updateEndpoint:$('#mUpdEndpoint').value.trim(),
+    migrate:{ configUrl:$('#mConfigUrl').value.trim(), merge:$('#mMerge').value, updateEndpoint:$('#mUpdEndpoint').value.trim(),
       updateChannel:$('#mUpdChannel').value.trim(), updateMode:$('#mUpdMode').value, pubkey:$('#mPubKey').value.trim() } };
 }
 $('#btnSaveProfile').onclick = async () => {
@@ -249,7 +250,7 @@ $('#btnNewProfile').onclick = async () => {
   current = name;
   $('#pName').textContent=name; $('#fAddr').value=''; $('#fPort').value=1080; $('#fMode').value='allowlist';
   $('#fUdp').checked=true; $('#fKill').checked=true; $('#fApps').value=''; $('#fSubnets').value='';
-  $('#mConfigUrl').value=''; $('#mUpdEndpoint').value=''; $('#mUpdChannel').value=''; $('#mUpdMode').value=''; $('#mPubKey').value='';
+  $('#mConfigUrl').value=''; $('#mMerge').value=''; $('#mUpdEndpoint').value=''; $('#mUpdChannel').value=''; $('#mUpdMode').value=''; $('#mPubKey').value='';
   show($('#editorCard'),true); banner($('#editBanner'),'info','New profile — fill in and Save & sign.'); renderSnippet();
 };
 function renderSnippet(){

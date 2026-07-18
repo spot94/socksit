@@ -240,6 +240,7 @@ func deepMerge(base, patch map[string]any) map[string]any {
 // the managed server.
 type migrateInstr struct {
 	ConfigURL      string `yaml:"config_url"`
+	Merge          string `yaml:"merge"`
 	PubKey         string `yaml:"pubkey"`
 	UpdateEndpoint string `yaml:"update_endpoint"`
 	UpdateChannel  string `yaml:"update_channel"`
@@ -287,6 +288,9 @@ func (r *Runtime) fetchMigrate(ctx context.Context, client *http.Client, cfg *co
 func applyMigrate(c *config.Config, m migrateInstr, local *config.Config) {
 	if u := strings.TrimSpace(m.ConfigURL); u != "" {
 		c.ConfigSource.URL = u
+	}
+	if mm := strings.TrimSpace(m.Merge); mm != "" {
+		c.ConfigSource.Merge = mm
 	}
 	if e := strings.TrimSpace(m.UpdateEndpoint); e != "" {
 		c.Update.Endpoint = e

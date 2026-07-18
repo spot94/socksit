@@ -95,6 +95,9 @@ clients centrally instead of reconfiguring each one:
 - **New config URL** — when the server moves. Clients apply it automatically; the
   pinned key still guards them (a wrong/hostile URL can't forge a valid config,
   worst case is a failed fetch), so no per-client approval is needed.
+- **Apply mode** (replace / override) — dictate whether clients take exactly this
+  config (replace) or keep their own apps/subnets on top (override). Applied
+  automatically.
 - **Update endpoint / channel / mode** — applied automatically too; app binaries
   are still verified against the app's built-in update key, so a bad endpoint
   can't push a malicious binary.

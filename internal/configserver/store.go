@@ -132,6 +132,7 @@ type ProfileView struct {
 // only after explicit local admin approval.
 type MigrateView struct {
 	ConfigURL      string `json:"configUrl"`
+	Merge          string `json:"merge"` // "" unchanged | replace | override
 	PubKey         string `json:"pubkey"`
 	UpdateEndpoint string `json:"updateEndpoint"`
 	UpdateChannel  string `json:"updateChannel"`
@@ -139,13 +140,14 @@ type MigrateView struct {
 }
 
 func (m *MigrateView) empty() bool {
-	return m == nil || (strings.TrimSpace(m.ConfigURL) == "" && strings.TrimSpace(m.PubKey) == "" &&
+	return m == nil || (strings.TrimSpace(m.ConfigURL) == "" && strings.TrimSpace(m.Merge) == "" && strings.TrimSpace(m.PubKey) == "" &&
 		strings.TrimSpace(m.UpdateEndpoint) == "" && strings.TrimSpace(m.UpdateChannel) == "" && strings.TrimSpace(m.UpdateMode) == "")
 }
 
 // feedMigrate is the signed migrate.yaml served to clients.
 type feedMigrate struct {
 	ConfigURL      string `yaml:"config_url,omitempty"`
+	Merge          string `yaml:"merge,omitempty"`
 	PubKey         string `yaml:"pubkey,omitempty"`
 	UpdateEndpoint string `yaml:"update_endpoint,omitempty"`
 	UpdateChannel  string `yaml:"update_channel,omitempty"`
@@ -223,7 +225,7 @@ func (s *Store) GetProfile(name string) (*ProfileView, error) {
 	if mb, err := os.ReadFile(s.migrateYamlPath(name)); err == nil {
 		var fm feedMigrate
 		if yaml.Unmarshal(mb, &fm) == nil {
-			pv.Migrate = &MigrateView{ConfigURL: fm.ConfigURL, PubKey: fm.PubKey,
+			pv.Migrate = &MigrateView{ConfigURL: fm.ConfigURL, Merge: fm.Merge, PubKey: fm.PubKey,
 				UpdateEndpoint: fm.UpdateEndpoint, UpdateChannel: fm.UpdateChannel, UpdateMode: fm.UpdateMode}
 		}
 	}
@@ -269,6 +271,7 @@ func (s *Store) SaveProfile(v *ProfileView) error {
 	}
 	mb, err := yaml.Marshal(feedMigrate{
 		ConfigURL:      strings.TrimSpace(v.Migrate.ConfigURL),
+		Merge:          strings.TrimSpace(v.Migrate.Merge),
 		PubKey:         strings.TrimSpace(v.Migrate.PubKey),
 		UpdateEndpoint: strings.TrimSpace(v.Migrate.UpdateEndpoint),
 		UpdateChannel:  strings.TrimSpace(v.Migrate.UpdateChannel),
@@ -301,6 +304,11 @@ func validateMigrate(m *MigrateView) error {
 	case "", "off", "notify", "auto":
 	default:
 		return errors.New("migrate.updateMode must be off, notify or auto")
+	}
+	switch strings.TrimSpace(m.Merge) {
+	case "", "replace", "override":
+	default:
+		return errors.New("migrate.merge must be replace or override")
 	}
 	return nil
 }
