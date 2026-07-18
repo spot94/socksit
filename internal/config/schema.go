@@ -162,13 +162,16 @@ func Default() *Config {
 	tray := true
 	signed := true
 	return &Config{
-		Proxy:      Proxy{Port: 1080, UDP: &udp},
-		Apps:       []string{},
-		Mode:       ModeAllowlist,
-		KillSwitch: &on,
-		ShowTray:   &tray,
-		DNS:        DNS{FakeIPv4: "198.18.0.0/15"},
-		Control:    Control{ClashAPI: "127.0.0.1:9797"},
+		Proxy: Proxy{Port: 1080, UDP: &udp},
+		Apps:  []string{},
+		// Private (RFC 1918) ranges bypass the proxy by default — LAN traffic
+		// should stay direct out of the box.
+		DirectSubnets: []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"},
+		Mode:          ModeAllowlist,
+		KillSwitch:    &on,
+		ShowTray:      &tray,
+		DNS:           DNS{FakeIPv4: "198.18.0.0/15"},
+		Control:       Control{ClashAPI: "127.0.0.1:9797"},
 		Update: Update{
 			Endpoint:      "https://github.com/spot94/socksit/releases/latest/download",
 			Channel:       "stable",
@@ -176,7 +179,7 @@ func Default() *Config {
 			CheckInterval: "24h",
 			Proxy:         "use-socks",
 		},
-		ConfigSource: ConfigSource{Interval: "1h", Signed: &signed},
+		ConfigSource: ConfigSource{Interval: "1h", Signed: &signed, Merge: MergeOverride},
 	}
 }
 
@@ -186,12 +189,13 @@ func (c *Config) ConfigManaged() bool { return strings.TrimSpace(c.ConfigSource.
 // ConfigSigned reports the effective signature requirement (default true).
 func (c *Config) ConfigSigned() bool { return c.ConfigSource.Signed == nil || *c.ConfigSource.Signed }
 
-// MergeMode reports the effective managed-config merge mode (default replace).
+// MergeMode reports the effective managed-config merge mode (default override —
+// clients keep their own apps/subnets unless the config explicitly says replace).
 func (c *Config) MergeMode() string {
-	if strings.EqualFold(strings.TrimSpace(c.ConfigSource.Merge), MergeOverride) {
-		return MergeOverride
+	if strings.EqualFold(strings.TrimSpace(c.ConfigSource.Merge), MergeReplace) {
+		return MergeReplace
 	}
-	return MergeReplace
+	return MergeOverride
 }
 
 // EffectiveApps is the app list the engine actually routes. Normally it is just

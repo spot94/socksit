@@ -119,6 +119,16 @@
   .applist .tag{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:2px 8px}
   .applist .x{border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0 4px}
   .applist .x:hover{color:var(--bad)}
+  /* chip editor (bypass subnets) */
+  .chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:6px 8px;min-height:38px}
+  .chips:focus-within{border-color:var(--accent)}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--border);border-radius:7px;padding:3px 6px 3px 9px;font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
+  .chip .x{border:none;background:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0 1px}
+  .chip .x:hover{color:var(--bad)}
+  .chip.managed{border-style:dashed;color:var(--muted);cursor:default}
+  .chip .ctag{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:1px 5px}
+  .chips .chipinput{border:none;background:none;outline:none;flex:1 0 130px;padding:4px 2px;color:var(--text);font:inherit}
+  .chips .chipinput.bad::placeholder{color:var(--bad)} .chips .chipinput.bad{color:var(--bad)}
 
   table{width:100%;border-collapse:collapse;font-size:13px}
   th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}
@@ -199,8 +209,7 @@
           <label class="fld"><span data-i18n="lbl.username">Username</span> <span class="muted" data-i18n="note.userBlank">(blank = keep/none)</span><input type="text" id="fUser" data-i18n-ph="ph.keep"></label>
           <label class="fld"><span data-i18n="lbl.password">Password</span> <span class="muted" data-i18n="note.passBlank">(blank = keep)</span><input type="password" id="fPass" data-i18n-ph="ph.keep"></label>
           <label class="fld"><span data-i18n="lbl.mode">Mode</span><select id="fMode"><option value="allowlist" data-i18n="opt.allowlist">allowlist — only listed apps</option><option value="blocklist" data-i18n="opt.blocklist">blocklist — all except listed</option></select></label>
-          <label class="fld"><span data-i18n="lbl.bypass">Bypass subnets</span><input type="text" id="fSubnets" placeholder="192.168.1.0/24, 172.16.0.0/16"></label>
-          <div class="sub muted wide" id="managedSubnetsNote" style="display:none"><span data-i18n="cfg.managedSubnets">Also direct, from the managed config:</span> <span id="managedSubnetsList" class="mono"></span></div>
+          <label class="fld"><span data-i18n="lbl.bypass">Bypass subnets</span><div class="chips" id="subnetChips"><input type="text" id="subnetInput" class="chipinput" data-i18n-ph="ph.subnet"></div></label>
           <div class="wide row" style="gap:22px">
             <label class="switch"><input type="checkbox" id="fKill"><span class="track"></span><span data-i18n="sw.killswitch">Kill-switch</span></label>
             <label class="switch"><input type="checkbox" id="fUdp"><span class="track"></span><span data-i18n="sw.udp">Proxy UDP</span></label>
@@ -349,7 +358,7 @@ const I18N = {
     'lbl.bypass':'Bypass subnets','sw.killswitch':'Kill-switch','sw.udp':'Proxy UDP','sw.tray':'Show in tray',
     'h.proxiedApps':'Proxied applications','ph.app':'app.exe or full path','btn.browse':'Browse…','btn.add':'Add','title.reloadProc':'Refresh running processes',
     'hint.apps':'Exact .exe name (any folder) or a full path. For web apps add the browser (chrome.exe / msedge.exe).','btn.save':'Save & apply',
-    'msg.noApps':'No apps yet.','title.remove':'Remove',
+    'msg.noApps':'No apps yet.','title.remove':'Remove','ph.subnet':'add subnet (Enter)','title.editChip':'Double-click to edit',
     'ph.filter':'filter…','sw.auto':'Auto','btn.refresh':'Refresh',
     'th.process':'Process','th.destination':'Destination','th.net':'Net','th.via':'Via','th.up':'Up','th.down':'Down',
     'stat.noData':'No data yet — click Refresh.','stat.noMatch':'No matching connections.',
@@ -382,7 +391,7 @@ const I18N = {
     'lbl.bypass':'Прямые подсети','sw.killswitch':'Kill-switch','sw.udp':'Проксировать UDP','sw.tray':'Значок в трее',
     'h.proxiedApps':'Проксируемые приложения','ph.app':'app.exe или полный путь','btn.browse':'Обзор…','btn.add':'Добавить','title.reloadProc':'Обновить список процессов',
     'hint.apps':'Точное имя .exe (в любой папке) или полный путь. Для веб-приложений добавьте браузер (chrome.exe / msedge.exe).','btn.save':'Сохранить и применить',
-    'msg.noApps':'Пока нет приложений.','title.remove':'Удалить',
+    'msg.noApps':'Пока нет приложений.','title.remove':'Удалить','ph.subnet':'подсеть + Enter','title.editChip':'Двойной клик — редактировать',
     'ph.filter':'фильтр…','sw.auto':'Авто','btn.refresh':'Обновить',
     'th.process':'Процесс','th.destination':'Назначение','th.net':'Сеть','th.via':'Через','th.up':'Отпр.','th.down':'Получ.',
     'stat.noData':'Пока нет данных — нажмите «Обновить».','stat.noMatch':'Нет подходящих соединений.',
@@ -524,10 +533,33 @@ document.getElementById('btnTest').onclick = ()=>testProxy(document.getElementBy
 let apps = [];
 let managedApps = [];
 let managedSubnets = [];
-function renderManagedSubnets(){
-  const note=g('managedSubnetsNote'), list=g('managedSubnetsList'); if(!note||!list) return;
-  if(g('cfgMerge').value==='override' && managedSubnets.length){ list.textContent=managedSubnets.join(', '); note.style.display=''; }
-  else note.style.display='none';
+let subnets = [];
+function validCidr(s){
+  s=(s||'').trim();
+  const m=s.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/);
+  if(m){ if([m[1],m[2],m[3],m[4]].some(o=>+o>255)) return false; return +m[5]<=32; }
+  if(s.includes(':') && /^[0-9a-fA-F:.]+\/\d{1,3}$/.test(s)) return +s.split('/')[1]<=128; // loose IPv6
+  return false;
+}
+function renderSubnets(){
+  const box=g('subnetChips'), input=g('subnetInput'); if(!box||!input) return;
+  [...box.querySelectorAll('.chip')].forEach(c=>c.remove());
+  const frag=document.createDocumentFragment();
+  subnets.forEach((s,i)=>{ const chip=document.createElement('span'); chip.className='chip'; chip.textContent=s; chip.title=t('title.editChip');
+    chip.ondblclick=()=>{ subnets.splice(i,1); input.value=s; renderSubnets(); input.focus(); };
+    const x=document.createElement('button'); x.type='button'; x.className='x'; x.textContent='×';
+    x.onclick=()=>{ subnets.splice(i,1); renderSubnets(); }; chip.appendChild(x); frag.appendChild(chip); });
+  if(g('cfgMerge').value==='override'){ managedSubnets.forEach(s=>{ const chip=document.createElement('span'); chip.className='chip managed'; chip.textContent=s; chip.title=t('cfg.managedApps');
+    const tag=document.createElement('span'); tag.className='ctag'; tag.textContent=t('cfg.managedTag'); chip.appendChild(tag); frag.appendChild(chip); }); }
+  box.insertBefore(frag, input);
+}
+function addSubnet(){
+  const input=g('subnetInput'); const v=(input.value||'').trim().replace(/[,\s]+$/,'');
+  if(!v){ input.classList.remove('bad'); return; }
+  if(!validCidr(v)){ input.classList.add('bad'); return; }
+  input.classList.remove('bad');
+  if(!subnets.some(x=>x.toLowerCase()===v.toLowerCase())) subnets.push(v);
+  input.value=''; renderSubnets(); input.focus();
 }
 function renderApps(){
   const ul = document.getElementById('appList'); if(!ul) return; ul.innerHTML='';
@@ -550,7 +582,7 @@ async function loadSettings(){
   document.getElementById('fUser').value = '';
   document.getElementById('fPass').value = '';
   document.getElementById('fMode').value = c.mode||'allowlist';
-  document.getElementById('fSubnets').value = (c.directSubnets||[]).join(', ');
+  subnets = (c.directSubnets||[]).slice();
   document.getElementById('fKill').checked = !!c.killSwitch;
   document.getElementById('fUdp').checked = !!c.udp;
   document.getElementById('fTray').checked = !!c.showTray;
@@ -559,7 +591,7 @@ async function loadSettings(){
   managedSubnets = (c.managedSubnets||[]).slice();
   g('cfgUrl').value = c.cfgUrl||'';
   g('cfgInterval').value = c.cfgInterval||'1h';
-  g('cfgMerge').value = c.cfgMerge || 'replace';
+  g('cfgMerge').value = c.cfgMerge || 'override';
   g('cfgProxy').value = c.cfgProxy||'';
   g('cfgSigned').checked = (c.cfgSigned !== false);
   g('cfgPubKey').value = c.cfgPubKey||'';
@@ -567,7 +599,7 @@ async function loadSettings(){
   g('keyRotKey').textContent = pend;
   g('keyRotBanner').style.display = pend ? '' : 'none';
   renderApps();
-  renderManagedSubnets();
+  renderSubnets();
   loadProcs();
   loadCfgStatus();
 }
@@ -593,20 +625,30 @@ async function loadProcs(){
   dl.innerHTML = names.map(n=>'<option value="'+escapeHtml(n)+'">').join('');
 }
 document.getElementById('btnReloadProc').onclick = loadProcs;
-g('cfgMerge').onchange = ()=>{ renderApps(); renderManagedSubnets(); };
+g('cfgMerge').onchange = ()=>{ renderApps(); renderSubnets(); };
 document.getElementById('btnBrowse').onclick = async ()=>{ const p = await call('appBrowseExe'); if(p){ const i=document.getElementById('fApp'); i.value = p; i.focus(); } };
 document.getElementById('btnAddApp').onclick = ()=>{ const i=document.getElementById('fApp'); const v=(i.value||'').trim(); if(v){ apps.push(v); i.value=''; renderApps(); } };
 document.getElementById('fApp').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); document.getElementById('btnAddApp').click(); }});
+g('subnetInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter'||e.key===','){ e.preventDefault(); addSubnet(); }
+  else if(e.key==='Backspace' && !e.target.value && subnets.length){ subnets.pop(); renderSubnets(); }
+  else e.target.classList.remove('bad');
+});
+g('subnetInput').addEventListener('blur', addSubnet);
+g('subnetInput').addEventListener('paste', e=>{
+  const txt=(e.clipboardData||window.clipboardData).getData('text'); if(!/[\s,;]/.test(txt)) return;
+  e.preventDefault(); txt.split(/[\s,;]+/).filter(Boolean).forEach(p=>{ if(validCidr(p) && !subnets.some(x=>x.toLowerCase()===p.toLowerCase())) subnets.push(p); });
+  renderSubnets(); g('subnetInput').focus();
+});
 function collect(){
-  const subs = (document.getElementById('fSubnets').value||'').split(/[\s,;]+/).filter(Boolean);
   return { address:document.getElementById('fAddress').value.trim(), port:parseInt(document.getElementById('fPort').value||'1080',10),
     username:document.getElementById('fUser').value, password:document.getElementById('fPass').value,
     mode:document.getElementById('fMode').value, killSwitch:document.getElementById('fKill').checked,
     udp:document.getElementById('fUdp').checked, showTray:document.getElementById('fTray').checked,
-    directSubnets:subs, apps:apps.slice(),
+    directSubnets:subnets.slice(), apps:apps.slice(),
     cfgUrl:document.getElementById('cfgUrl').value.trim(), cfgInterval:document.getElementById('cfgInterval').value.trim()||'1h', cfgMerge:document.getElementById('cfgMerge').value, cfgProxy:document.getElementById('cfgProxy').value.trim(), cfgSigned:document.getElementById('cfgSigned').checked, cfgPubKey:document.getElementById('cfgPubKey').value.trim() };
 }
-document.getElementById('btnSave').onclick = async ()=>{ const b=document.getElementById('setBanner'); banner(b,'info',t('msg.saving'));
+document.getElementById('btnSave').onclick = async ()=>{ const b=document.getElementById('setBanner'); addSubnet(); banner(b,'info',t('msg.saving'));
   const r = await call('appSaveConfig', collect()); banner(b, r.ok?'ok':'err', r.message); refreshState(); };
 document.getElementById('btnTest2').onclick = ()=>testProxy(document.getElementById('setBanner'), true);
 

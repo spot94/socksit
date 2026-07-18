@@ -370,10 +370,10 @@ func (a *app) saveConfig(in saveInput) result {
 	cs := in.CfgSigned
 	c.ConfigSource.Signed = &cs
 	c.ConfigSource.PubKey = strings.TrimSpace(in.CfgPubKey)
-	if strings.EqualFold(strings.TrimSpace(in.CfgMerge), config.MergeOverride) {
-		c.ConfigSource.Merge = config.MergeOverride
+	if strings.EqualFold(strings.TrimSpace(in.CfgMerge), config.MergeReplace) {
+		c.ConfigSource.Merge = config.MergeReplace
 	} else {
-		c.ConfigSource.Merge = "" // replace (default); omitempty keeps the YAML clean
+		c.ConfigSource.Merge = config.MergeOverride // default
 	}
 	c.ConfigSource.Proxy = strings.TrimSpace(in.CfgProxy)
 
