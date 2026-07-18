@@ -122,7 +122,9 @@ const (
 // manifest (public key compiled into the binary), so the endpoint/transport are
 // untrusted. See docs/update-design.md.
 type Update struct {
-	// Endpoint is the base URL of the release channel; empty = updates disabled.
+	// Endpoint is the base URL of the release channel. If empty it is backfilled
+	// with the built-in default (the project's GitHub releases) so updates work out
+	// of the box; to disable update checks set mode: off. Override for a fork/mirror.
 	// GitHub: https://github.com/<owner>/<repo>/releases/latest/download
 	Endpoint string `yaml:"endpoint"`
 	// Channel selects the manifest name (stable -> manifest.json, else manifest-<channel>.json).
@@ -363,6 +365,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Log.Level == "" {
 		c.Log.Level = d.Log.Level
+	}
+	if c.Update.Endpoint == "" {
+		// Backfill the release endpoint so updates work out of the box — a config
+		// that omits it (first-run, hand-written, a preset) otherwise has updates
+		// silently disabled. To actually disable checks, set mode: off.
+		c.Update.Endpoint = d.Update.Endpoint
 	}
 	if c.Update.Channel == "" {
 		c.Update.Channel = d.Update.Channel

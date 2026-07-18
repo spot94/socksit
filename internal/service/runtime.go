@@ -272,10 +272,16 @@ func (r *Runtime) ensureFirstRunConfig() bool {
 	if _, err := os.Stat(r.configPath()); err == nil {
 		return false
 	}
-	def := "# SocksIt — set proxy.address and add apps, then save.\n" +
-		"# Easiest: run `socksit gui`. Changes apply automatically.\n" +
-		"proxy:\n  address: \"\"\n  port: 1080\napps: []\nmode: allowlist\nkill_switch: true\n"
-	return os.WriteFile(r.configPath(), []byte(def), 0o600) == nil
+	// Write the full built-in default (single source of truth) so the file is
+	// complete and correct out of the box — including the update endpoint, which a
+	// minimal template used to omit, leaving new users unable to update.
+	header := []byte("# SocksIt — set proxy.address and add apps, then save.\n" +
+		"# Easiest: run `socksit gui`. Changes apply automatically.\n")
+	body, err := yaml.Marshal(config.Default())
+	if err != nil {
+		return false
+	}
+	return os.WriteFile(r.configPath(), append(header, body...), 0o600) == nil
 }
 
 // ensureUserWritable grants interactive users Modify on the data dir so the
