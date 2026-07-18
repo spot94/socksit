@@ -14,6 +14,8 @@
   @media (prefers-color-scheme: dark){
     :root{ --bg:#0e1216; --panel:#161c22; --panel-2:#1b232b; --text:#dce4eb; --muted:#90a2b0; --border:#26313b; --accent-weak:#0e7c8630; }
   }
+  :root[data-theme="light"]{ --bg:#f4f6f8; --panel:#fff; --panel-2:#f8fafc; --text:#263038; --muted:#728492; --border:#e2e8ee; --accent-weak:#0e7c8618; }
+  :root[data-theme="dark"]{ --bg:#0e1216; --panel:#161c22; --panel-2:#1b232b; --text:#dce4eb; --muted:#90a2b0; --border:#26313b; --accent-weak:#0e7c8630; }
   *{box-sizing:border-box}
   body{margin:0;font:14px/1.42 system-ui,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text)}
   a{color:var(--accent)}
@@ -56,16 +58,25 @@
   .authbox h1{margin-bottom:4px} .authbox .sub{color:var(--muted);margin-bottom:14px;text-align:center}
   .snippet{background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:10px;white-space:pre;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
   .pill{font-size:11px;font-weight:500;padding:3px 9px;border-radius:999px;background:var(--panel-2);border:1px solid var(--border);color:var(--muted)}
+  .topctl{position:fixed;top:12px;right:14px;display:flex;gap:8px;z-index:50}
+  .topctl .mini{padding:5px 8px;font-size:12px;border-radius:8px;color:var(--muted)}
+  .topctl .mini:hover{color:var(--text)}
 </style>
+<script>try{var _t=localStorage.getItem('cs.theme');if(_t==='dark'||_t==='light')document.documentElement.setAttribute('data-theme',_t);}catch(e){}</script>
 </head>
 <body>
+
+<div class="topctl">
+  <select id="langSel" class="mini" data-i18n-title="ctl.lang"><option value="en">EN</option><option value="ru">RU</option></select>
+  <button id="themeBtn" class="mini" data-i18n-title="ctl.theme">◐</button>
+</div>
 
 <div id="screen-auth" class="center" style="display:none">
   <div class="authbox">
     <svg class="authlogo" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="8" fill="#0e7c86"/><circle cx="9" cy="23" r="3" fill="#fff"/><path d="M9 23 L21 11" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M15 11 H21 V17" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
     <h1 id="authTitle" style="text-align:center">Sign in</h1>
     <div class="sub" id="authSub">Config server administration</div>
-    <label class="fld">Password<input type="password" id="authPw" autocomplete="current-password"></label>
+    <label class="fld"><span data-i18n="auth.password">Password</span><input type="password" id="authPw" autocomplete="current-password"></label>
     <div class="banner" id="authBanner"></div>
     <div class="row" style="margin-top:12px"><button class="primary" id="authBtn" style="flex:1">Sign in</button></div>
   </div>
@@ -75,90 +86,177 @@
   <aside class="side">
     <div class="brand"><svg class="logo" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="8" fill="#0e7c86"/><circle cx="9" cy="23" r="3" fill="#fff"/><path d="M9 23 L21 11" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M15 11 H21 V17" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>SocksIt Config</div>
     <nav class="nav" id="nav">
-      <a data-sec="profiles" class="active">Profiles</a>
-      <a data-sec="key">Signing key</a>
-      <a data-sec="audit">Audit log</a>
+      <a data-sec="profiles" class="active" data-i18n="nav.profiles">Profiles</a>
+      <a data-sec="key" data-i18n="nav.key">Signing key</a>
+      <a data-sec="audit" data-i18n="nav.audit">Audit log</a>
     </nav>
-    <div class="foot"><button id="btnLogout" style="width:100%">Log out</button></div>
+    <div class="foot"><button id="btnLogout" style="width:100%" data-i18n="btn.logout">Log out</button></div>
   </aside>
   <main class="main">
     <section class="section active" id="sec-profiles">
-      <div class="head"><h1>Profiles</h1><button id="btnNewProfile">New profile</button></div>
+      <div class="head"><h1 data-i18n="nav.profiles">Profiles</h1><button id="btnNewProfile" data-i18n="btn.newProfile">New profile</button></div>
       <div class="row" style="align-items:flex-start;gap:16px">
-        <div class="card" style="width:200px;flex:0 0 auto"><h3>Profiles</h3><div class="plist" id="plist"></div></div>
+        <div class="card" style="width:200px;flex:0 0 auto"><h3 data-i18n="nav.profiles">Profiles</h3><div class="plist" id="plist"></div></div>
         <div class="card" style="flex:1;min-width:320px;display:none" id="editorCard">
-          <h3>Edit profile</h3>
+          <h3 data-i18n="h.editProfile">Edit profile</h3>
           <div class="row" style="margin-bottom:8px"><span class="pill" id="pName">—</span></div>
           <div class="grid">
-            <label class="fld">Proxy address<input type="text" id="fAddr" placeholder="10.0.0.1"></label>
-            <label class="fld">Port<input type="number" id="fPort" value="1080"></label>
-            <label class="fld">Mode<select id="fMode"><option value="allowlist">allowlist</option><option value="blocklist">blocklist</option></select></label>
+            <label class="fld"><span data-i18n="lbl.address">Proxy address</span><input type="text" id="fAddr" placeholder="10.0.0.1"></label>
+            <label class="fld"><span data-i18n="lbl.port">Port</span><input type="number" id="fPort" value="1080"></label>
+            <label class="fld"><span data-i18n="lbl.mode">Mode</span><select id="fMode"><option value="allowlist">allowlist</option><option value="blocklist">blocklist</option></select></label>
           </div>
           <div class="grid">
-            <label class="fld">Kill-switch<select id="fKill"><option value="user">user-defined</option><option value="on">on (forced)</option><option value="off">off (forced)</option></select></label>
-            <label class="fld">Proxy UDP<select id="fUdp"><option value="user">user-defined</option><option value="on">on (forced)</option><option value="off">off (forced)</option></select></label>
+            <label class="fld"><span data-i18n="lbl.kill">Kill-switch</span><select id="fKill"><option value="user" data-i18n="opt.user">user-defined</option><option value="on" data-i18n="opt.onForced">on (forced)</option><option value="off" data-i18n="opt.offForced">off (forced)</option></select></label>
+            <label class="fld"><span data-i18n="lbl.udp">Proxy UDP</span><select id="fUdp"><option value="user" data-i18n="opt.user">user-defined</option><option value="on" data-i18n="opt.onForced">on (forced)</option><option value="off" data-i18n="opt.offForced">off (forced)</option></select></label>
           </div>
-          <div class="sub muted" style="margin-top:4px">on/off force the value and lock the toggle on clients; user-defined leaves it to each client.</div>
+          <div class="sub muted" style="margin-top:4px" data-i18n="hint.triToggle">on/off force the value and lock the toggle on clients; user-defined leaves it to each client.</div>
           <div class="grid" style="margin-top:10px">
-            <label class="fld">Apps (one per line)<textarea id="fApps" placeholder="chrome.exe&#10;Telegram.exe"></textarea></label>
-            <label class="fld">Direct subnets (one per line)<textarea id="fSubnets" placeholder="192.168.1.0/24"></textarea></label>
+            <label class="fld"><span data-i18n="lbl.appsMulti">Apps (one per line)</span><textarea id="fApps" placeholder="chrome.exe&#10;Telegram.exe"></textarea></label>
+            <label class="fld"><span data-i18n="lbl.subnetsMulti">Direct subnets (one per line)</span><textarea id="fSubnets" placeholder="192.168.1.0/24"></textarea></label>
           </div>
           <div class="banner" id="editBanner"></div>
-          <div class="row" style="margin-top:12px"><button class="primary" id="btnSaveProfile">Save &amp; sign</button><button class="danger" id="btnDeleteProfile">Delete</button></div>
-          <h3 style="margin-top:16px">Migration (optional) — pushed to clients</h3>
-          <div class="sub muted">Leave a field empty to keep it unchanged; clear everything to remove the migration.</div>
+          <div class="row" style="margin-top:12px"><button class="primary" id="btnSaveProfile" data-i18n="btn.saveSign">Save &amp; sign</button><button class="danger" id="btnDeleteProfile" data-i18n="btn.delete">Delete</button></div>
+          <h3 style="margin-top:16px" data-i18n="h.migration">Migration (optional) — pushed to clients</h3>
+          <div class="sub muted" data-i18n="hint.migration">Leave a field empty to keep it unchanged; clear everything to remove the migration.</div>
 
           <div class="mgroup">
-            <div class="msub">Config channel</div>
+            <div class="msub" data-i18n="sub.configChannel">Config channel</div>
             <div class="grid">
-              <label class="fld wide">New config URL<input type="text" id="mConfigUrl" placeholder="https://new-host/configs/team-a/socksit.yaml"></label>
-              <label class="fld wide">Apply mode<select id="mMerge"><option value="">(unchanged)</option><option value="replace">Replace — server controls everything</option><option value="override">Override — clients keep their own</option></select></label>
-              <label class="fld wide">Rotate trusted key (new pubkey)<input type="text" id="mPubKey" class="mono" placeholder="new base64 Ed25519 public key"></label>
+              <label class="fld wide"><span data-i18n="lbl.newConfigUrl">New config URL</span><input type="text" id="mConfigUrl" placeholder="https://new-host/configs/team-a/socksit.yaml"></label>
+              <label class="fld wide"><span data-i18n="lbl.applyMode">Apply mode</span><select id="mMerge"><option value="" data-i18n="opt.unchanged">(unchanged)</option><option value="replace" data-i18n="opt.replaceServer">Replace — server controls everything</option><option value="override" data-i18n="opt.overrideClients">Override — clients keep their own</option></select></label>
+              <label class="fld wide"><span data-i18n="lbl.rotateKey">Rotate trusted key (new pubkey)</span><input type="text" id="mPubKey" class="mono" placeholder="new base64 Ed25519 public key"></label>
             </div>
-            <div class="sub muted" style="margin-top:6px">URL and apply mode apply automatically (still guarded by the pinned key). Replace = clients take exactly this config; Override = clients keep their own apps/subnets on top. A new trusted key moves the root of trust, so each client's admin must approve it.</div>
+            <div class="sub muted" style="margin-top:6px" data-i18n="hint.configChannel">URL and apply mode apply automatically (still guarded by the pinned key). Replace = clients take exactly this config; Override = clients keep their own apps/subnets on top. A new trusted key moves the root of trust, so each client's admin must approve it.</div>
           </div>
 
           <div class="mgroup">
-            <div class="msub">Update channel</div>
+            <div class="msub" data-i18n="sub.updateChannel">Update channel</div>
             <div class="grid">
-              <label class="fld wide">Update endpoint<input type="text" id="mUpdEndpoint" placeholder="https://…/releases/latest/download"></label>
-              <label class="fld">Update channel<input type="text" id="mUpdChannel" placeholder="stable"></label>
-              <label class="fld">Update mode<select id="mUpdMode"><option value="">(unchanged)</option><option value="off">off</option><option value="notify">notify</option><option value="auto">auto</option></select></label>
+              <label class="fld wide"><span data-i18n="lbl.updEndpoint">Update endpoint</span><input type="text" id="mUpdEndpoint" placeholder="https://…/releases/latest/download"></label>
+              <label class="fld"><span data-i18n="lbl.updChannel">Update channel</span><input type="text" id="mUpdChannel" placeholder="stable"></label>
+              <label class="fld"><span data-i18n="lbl.updMode">Update mode</span><select id="mUpdMode"><option value="" data-i18n="opt.unchanged">(unchanged)</option><option value="off">off</option><option value="notify">notify</option><option value="auto">auto</option></select></label>
             </div>
-            <div class="sub muted" style="margin-top:6px">Applied automatically; app binaries are still verified against the built-in update key.</div>
+            <div class="sub muted" style="margin-top:6px" data-i18n="hint.updateChannel">Applied automatically; app binaries are still verified against the built-in update key.</div>
           </div>
-          <h3 style="margin-top:16px">Client snippet (config_source)</h3>
+          <h3 style="margin-top:16px" data-i18n="h.snippet">Client snippet (config_source)</h3>
           <div class="snippet" id="snippet">—</div>
-          <div class="row" style="margin-top:8px"><button id="btnCopySnippet">Copy</button></div>
+          <div class="row" style="margin-top:8px"><button id="btnCopySnippet" data-i18n="btn.copy">Copy</button></div>
         </div>
       </div>
     </section>
 
     <section class="section" id="sec-key">
-      <div class="head"><h1>Signing key</h1></div>
+      <div class="head"><h1 data-i18n="nav.key">Signing key</h1></div>
       <div class="card">
-        <h3>Public key (config_source.pubkey)</h3>
+        <h3 data-i18n="h.pubkey">Public key (config_source.pubkey)</h3>
         <div class="snippet" id="pubKey">—</div>
-        <div class="row" style="margin-top:8px"><button id="btnCopyPub">Copy</button></div>
-        <div class="banner info" style="display:block;margin-top:12px">Rotating the key re-signs every profile — all clients must update their <span class="mono">config_source.pubkey</span> to the new value.</div>
-        <div class="row" style="margin-top:12px"><button class="primary" id="btnGenKey">Generate new key</button></div>
-        <h3 style="margin-top:18px">Import existing key</h3>
-        <label class="fld">Base64 Ed25519 private key (from <span class="mono">mksign genkey</span>)<input type="text" id="fImportKey" class="mono" placeholder="base64 64-byte private key"></label>
-        <div class="row" style="margin-top:10px"><button id="btnImportKey">Import &amp; re-sign</button></div>
+        <div class="row" style="margin-top:8px"><button id="btnCopyPub" data-i18n="btn.copy">Copy</button></div>
+        <div class="banner info" style="display:block;margin-top:12px" data-i18n="hint.rotate">Rotating the key re-signs every profile — all clients must update their config_source.pubkey to the new value.</div>
+        <div class="row" style="margin-top:12px"><button class="primary" id="btnGenKey" data-i18n="btn.genKey">Generate new key</button></div>
+        <h3 style="margin-top:18px" data-i18n="h.importKey">Import existing key</h3>
+        <label class="fld"><span data-i18n="lbl.importKey">Base64 Ed25519 private key (mksign genkey)</span><input type="text" id="fImportKey" class="mono" placeholder="base64 64-byte private key"></label>
+        <div class="row" style="margin-top:10px"><button id="btnImportKey" data-i18n="btn.importResign">Import &amp; re-sign</button></div>
         <div class="banner" id="keyBanner"></div>
       </div>
     </section>
 
     <section class="section" id="sec-audit">
-      <div class="head"><h1>Audit log</h1><button id="btnReloadAudit">Refresh</button></div>
-      <div class="card"><table><thead><tr><th>Time (UTC)</th><th>Action</th><th>Object</th><th>IP</th></tr></thead><tbody id="auditBody"></tbody></table></div>
+      <div class="head"><h1 data-i18n="nav.audit">Audit log</h1><button id="btnReloadAudit" data-i18n="btn.refresh">Refresh</button></div>
+      <div class="card"><table><thead><tr><th data-i18n="th.time">Time (UTC)</th><th data-i18n="th.action">Action</th><th data-i18n="th.object">Object</th><th data-i18n="th.ip">IP</th></tr></thead><tbody id="auditBody"></tbody></table></div>
     </section>
   </main>
 </div>
 
 <script>
+const I18N = {
+  en: {
+    'ctl.lang':'Language','ctl.theme':'Theme',
+    'auth.signin':'Sign in','auth.createAdmin':'Create admin',
+    'auth.subLogin':'Config server administration','auth.subSetup':'Set the first-run administrator password.',
+    'auth.password':'Password',
+    'nav.profiles':'Profiles','nav.key':'Signing key','nav.audit':'Audit log','btn.logout':'Log out',
+    'btn.newProfile':'New profile','h.editProfile':'Edit profile',
+    'lbl.address':'Proxy address','lbl.port':'Port','lbl.mode':'Mode','lbl.kill':'Kill-switch','lbl.udp':'Proxy UDP',
+    'opt.user':'user-defined','opt.onForced':'on (forced)','opt.offForced':'off (forced)',
+    'hint.triToggle':'on/off force the value and lock the toggle on clients; user-defined leaves it to each client.',
+    'lbl.appsMulti':'Apps (one per line)','lbl.subnetsMulti':'Direct subnets (one per line)',
+    'btn.saveSign':'Save & sign','btn.delete':'Delete',
+    'h.migration':'Migration (optional) — pushed to clients',
+    'hint.migration':'Leave a field empty to keep it unchanged; clear everything to remove the migration.',
+    'sub.configChannel':'Config channel','lbl.newConfigUrl':'New config URL','lbl.applyMode':'Apply mode',
+    'opt.unchanged':'(unchanged)','opt.replaceServer':'Replace — server controls everything','opt.overrideClients':'Override — clients keep their own',
+    'lbl.rotateKey':'Rotate trusted key (new pubkey)',
+    'hint.configChannel':"URL and apply mode apply automatically (still guarded by the pinned key). Replace = clients take exactly this config; Override = clients keep their own apps/subnets on top. A new trusted key moves the root of trust, so each client's admin must approve it.",
+    'sub.updateChannel':'Update channel','lbl.updEndpoint':'Update endpoint','lbl.updChannel':'Update channel','lbl.updMode':'Update mode',
+    'hint.updateChannel':'Applied automatically; app binaries are still verified against the built-in update key.',
+    'h.snippet':'Client snippet (config_source)','btn.copy':'Copy',
+    'h.pubkey':'Public key (config_source.pubkey)',
+    'hint.rotate':'Rotating the key re-signs every profile — all clients must update their config_source.pubkey to the new value.',
+    'btn.genKey':'Generate new key','h.importKey':'Import existing key','lbl.importKey':'Base64 Ed25519 private key (mksign genkey)','btn.importResign':'Import & re-sign',
+    'btn.refresh':'Refresh','th.time':'Time (UTC)','th.action':'Action','th.object':'Object','th.ip':'IP',
+    'msg.noProfiles':'No profiles yet.','msg.savedSigned':'Saved and signed.','msg.newProfile':'New profile — fill in and Save & sign.',
+    'msg.noKey':'No signing key yet — generate or import one.','msg.keyGenerated':'New key generated; profiles re-signed.','msg.keyImported':'Key imported; profiles re-signed.',
+    'snippet.noKey':'<generate a signing key first>',
+    'confirm.deleteProfile':'Delete profile "{name}"?','confirm.genKey':'Generate a NEW key? Every profile is re-signed and all clients must update their pubkey.',
+    'prompt.profileName':'Profile name (lowercase letters, digits, hyphens):','alert.invalidName':'Invalid name.',
+  },
+  ru: {
+    'ctl.lang':'Язык','ctl.theme':'Тема',
+    'auth.signin':'Вход','auth.createAdmin':'Создать администратора',
+    'auth.subLogin':'Администрирование сервера конфигов','auth.subSetup':'Задайте пароль администратора при первом запуске.',
+    'auth.password':'Пароль',
+    'nav.profiles':'Профили','nav.key':'Ключ подписи','nav.audit':'Аудит','btn.logout':'Выйти',
+    'btn.newProfile':'Новый профиль','h.editProfile':'Редактирование профиля',
+    'lbl.address':'Адрес прокси','lbl.port':'Порт','lbl.mode':'Режим','lbl.kill':'Kill-switch','lbl.udp':'Проксировать UDP',
+    'opt.user':'по выбору клиента','opt.onForced':'вкл (форс)','opt.offForced':'выкл (форс)',
+    'hint.triToggle':'вкл/выкл форсируют значение и блокируют тумблер у клиентов; «по выбору клиента» оставляет решение клиенту.',
+    'lbl.appsMulti':'Приложения (по одному в строке)','lbl.subnetsMulti':'Прямые подсети (по одной в строке)',
+    'btn.saveSign':'Сохранить и подписать','btn.delete':'Удалить',
+    'h.migration':'Миграция (опц.) — рассылается клиентам',
+    'hint.migration':'Пустое поле — не менять; очисти всё — убрать миграцию.',
+    'sub.configChannel':'Канал конфига','lbl.newConfigUrl':'Новый URL конфига','lbl.applyMode':'Режим применения',
+    'opt.unchanged':'(не менять)','opt.replaceServer':'Заменять — всё с сервера','opt.overrideClients':'Переопределять — клиенты сохраняют своё',
+    'lbl.rotateKey':'Сменить доверенный ключ (новый pubkey)',
+    'hint.configChannel':'URL и режим применяются автоматически (под защитой закреплённого ключа). Заменять = клиент берёт ровно этот конфиг; Переопределять = клиент сохраняет свои приложения/подсети поверх. Новый доверенный ключ меняет корень доверия — его должен подтвердить админ каждого клиента.',
+    'sub.updateChannel':'Канал обновлений','lbl.updEndpoint':'Эндпоинт обновлений','lbl.updChannel':'Канал (channel)','lbl.updMode':'Режим обновлений',
+    'hint.updateChannel':'Применяется автоматически; бинарь обновления всё равно проверяется вшитым ключом.',
+    'h.snippet':'Сниппет для клиента (config_source)','btn.copy':'Копировать',
+    'h.pubkey':'Публичный ключ (config_source.pubkey)',
+    'hint.rotate':'Смена ключа пере-подписывает все профили — всем клиентам нужно обновить config_source.pubkey на новое значение.',
+    'btn.genKey':'Сгенерировать новый ключ','h.importKey':'Импорт существующего ключа','lbl.importKey':'Приватный Ed25519 в base64 (mksign genkey)','btn.importResign':'Импортировать и пере-подписать',
+    'btn.refresh':'Обновить','th.time':'Время (UTC)','th.action':'Действие','th.object':'Объект','th.ip':'IP',
+    'msg.noProfiles':'Пока нет профилей.','msg.savedSigned':'Сохранено и подписано.','msg.newProfile':'Новый профиль — заполни и «Сохранить и подписать».',
+    'msg.noKey':'Ключа ещё нет — сгенерируй или импортируй.','msg.keyGenerated':'Новый ключ сгенерирован; профили пере-подписаны.','msg.keyImported':'Ключ импортирован; профили пере-подписаны.',
+    'snippet.noKey':'<сначала сгенерируй ключ подписи>',
+    'confirm.deleteProfile':'Удалить профиль «{name}»?','confirm.genKey':'Сгенерировать НОВЫЙ ключ? Все профили пере-подписываются, всем клиентам нужно обновить pubkey.',
+    'prompt.profileName':'Имя профиля (строчные буквы, цифры, дефисы):','alert.invalidName':'Некорректное имя.',
+  },
+};
+let lang = 'en', theme = 'system';
+function t(k, vars){ let s=(I18N[lang]&&I18N[lang][k]) || I18N.en[k] || k; if(vars) for(const n in vars) s=s.replace('{'+n+'}', vars[n]); return s; }
+function applyAuthText(){
+  $('#authTitle').textContent = mode==='setup' ? t('auth.createAdmin') : t('auth.signin');
+  $('#authSub').textContent = mode==='setup' ? t('auth.subSetup') : t('auth.subLogin');
+  $('#authBtn').textContent = mode==='setup' ? t('auth.createAdmin') : t('auth.signin');
+}
+function applyLang(l){
+  lang = l; document.documentElement.setAttribute('lang', l);
+  document.querySelectorAll('[data-i18n]').forEach(e=>e.textContent = t(e.getAttribute('data-i18n')));
+  document.querySelectorAll('[data-i18n-title]').forEach(e=>e.setAttribute('title', t(e.getAttribute('data-i18n-title'))));
+  applyAuthText(); renderSnippet();
+  try{ localStorage.setItem('cs.lang', l); }catch(e){}
+}
+function applyTheme(th){
+  theme = th;
+  if(th==='dark'||th==='light') document.documentElement.setAttribute('data-theme', th);
+  else document.documentElement.removeAttribute('data-theme');
+  $('#themeBtn').textContent = th==='dark'?'☀':(th==='light'?'☾':'◐');
+  try{ localStorage.setItem('cs.theme', th); }catch(e){}
+}
+$('#themeBtn').onclick = ()=>applyTheme(theme==='system'?'light':(theme==='light'?'dark':'system'));
+$('#langSel').onchange = e=>applyLang(e.target.value);
+
 let csrf = '';
-const $ = s => document.querySelector(s);
 async function api(path, method='GET', body){
   const opt = { method, credentials:'same-origin', headers:{} };
   if(body!==undefined){ opt.headers['Content-Type']='application/json'; opt.body=JSON.stringify(body); }
@@ -178,9 +276,7 @@ async function boot(){
   const s = await api('/api/session');
   if(s.authenticated){ csrf = s.csrf; enterApp(); return; }
   mode = s.hasAdmin ? 'login' : 'setup';
-  $('#authTitle').textContent = mode==='setup' ? 'Create admin' : 'Sign in';
-  $('#authSub').textContent = mode==='setup' ? 'Set the first-run administrator password.' : 'Config server administration';
-  $('#authBtn').textContent = mode==='setup' ? 'Create admin' : 'Sign in';
+  applyAuthText();
   $('#authPw').setAttribute('autocomplete', mode==='setup'?'new-password':'current-password');
   show($('#screen-auth'), true); show($('#screen-app'), false);
   $('#authPw').focus();
@@ -211,7 +307,7 @@ let current = null, pubKey = '';
 async function loadProfiles(){
   const {profiles} = await api('/api/profiles');
   const box = $('#plist'); box.innerHTML='';
-  if(!profiles || !profiles.length){ box.innerHTML='<div class="muted" style="padding:8px">No profiles yet.</div>'; }
+  if(!profiles || !profiles.length){ box.innerHTML='<div class="muted" style="padding:8px">'+esc(t('msg.noProfiles'))+'</div>'; }
   (profiles||[]).forEach(n=>{ const a=document.createElement('a'); a.textContent=n; if(n===current) a.classList.add('active'); a.onclick=()=>selectProfile(n); box.appendChild(a); });
 }
 async function selectProfile(name){
@@ -236,23 +332,23 @@ function collect(){
       updateChannel:$('#mUpdChannel').value.trim(), updateMode:$('#mUpdMode').value, pubkey:$('#mPubKey').value.trim() } };
 }
 $('#btnSaveProfile').onclick = async () => {
-  try{ await api('/api/profiles/'+encodeURIComponent(current),'POST',collect()); banner($('#editBanner'),'ok','Saved and signed.'); renderSnippet(); }
+  try{ await api('/api/profiles/'+encodeURIComponent(current),'POST',collect()); banner($('#editBanner'),'ok',t('msg.savedSigned')); renderSnippet(); }
   catch(e){ banner($('#editBanner'),'err', e.message); }
 };
 $('#btnDeleteProfile').onclick = async () => {
-  if(!confirm('Delete profile "'+current+'"?')) return;
+  if(!confirm(t('confirm.deleteProfile',{name:current}))) return;
   try{ await api('/api/profiles/'+encodeURIComponent(current),'DELETE'); current=null; show($('#editorCard'),false); loadProfiles(); }
   catch(e){ banner($('#editBanner'),'err', e.message); }
 };
 $('#btnNewProfile').onclick = async () => {
-  const name = (prompt('Profile name (lowercase letters, digits, hyphens):')||'').trim();
+  const name = (prompt(t('prompt.profileName'))||'').trim();
   if(!name) return;
-  if(!/^[a-z0-9][a-z0-9-]{0,39}$/.test(name)){ alert('Invalid name.'); return; }
+  if(!/^[a-z0-9][a-z0-9-]{0,39}$/.test(name)){ alert(t('alert.invalidName')); return; }
   current = name;
   $('#pName').textContent=name; $('#fAddr').value=''; $('#fPort').value=1080; $('#fMode').value='allowlist';
   $('#fUdp').value='user'; $('#fKill').value='user'; $('#fApps').value=''; $('#fSubnets').value='';
   $('#mConfigUrl').value=''; $('#mMerge').value=''; $('#mUpdEndpoint').value=''; $('#mUpdChannel').value=''; $('#mUpdMode').value=''; $('#mPubKey').value='';
-  show($('#editorCard'),true); banner($('#editBanner'),'info','New profile — fill in and Save & sign.'); renderSnippet();
+  show($('#editorCard'),true); banner($('#editBanner'),'info',t('msg.newProfile')); renderSnippet();
 };
 function renderSnippet(){
   if(!current){ $('#snippet').textContent='—'; return; }
@@ -260,7 +356,7 @@ function renderSnippet(){
   $('#snippet').textContent =
     'config_source:\n' +
     '  url: ' + url + '\n' +
-    '  pubkey: ' + (pubKey || '<generate a signing key first>') + '\n' +
+    '  pubkey: ' + (pubKey || t('snippet.noKey')) + '\n' +
     '  signed: true\n' +
     '  merge: replace';
 }
@@ -269,16 +365,16 @@ $('#btnCopySnippet').onclick = ()=>navigator.clipboard && navigator.clipboard.wr
 /* ---- key ---- */
 async function loadKey(){
   const k = await api('/api/key'); pubKey = k.publicKey||'';
-  $('#pubKey').textContent = pubKey || 'No signing key yet — generate or import one.';
+  $('#pubKey').textContent = pubKey || t('msg.noKey');
   renderSnippet();
 }
 $('#btnGenKey').onclick = async () => {
-  if(!confirm('Generate a NEW key? Every profile is re-signed and all clients must update their pubkey.')) return;
-  try{ const r=await api('/api/key/generate','POST',{}); pubKey=r.publicKey; $('#pubKey').textContent=pubKey; banner($('#keyBanner'),'ok','New key generated; profiles re-signed.'); renderSnippet(); }
+  if(!confirm(t('confirm.genKey'))) return;
+  try{ const r=await api('/api/key/generate','POST',{}); pubKey=r.publicKey; $('#pubKey').textContent=pubKey; banner($('#keyBanner'),'ok',t('msg.keyGenerated')); renderSnippet(); }
   catch(e){ banner($('#keyBanner'),'err', e.message); }
 };
 $('#btnImportKey').onclick = async () => {
-  try{ const r=await api('/api/key/import','POST',{privateKey:$('#fImportKey').value.trim()}); pubKey=r.publicKey; $('#pubKey').textContent=pubKey; $('#fImportKey').value=''; banner($('#keyBanner'),'ok','Key imported; profiles re-signed.'); renderSnippet(); }
+  try{ const r=await api('/api/key/import','POST',{privateKey:$('#fImportKey').value.trim()}); pubKey=r.publicKey; $('#pubKey').textContent=pubKey; $('#fImportKey').value=''; banner($('#keyBanner'),'ok',t('msg.keyImported')); renderSnippet(); }
   catch(e){ banner($('#keyBanner'),'err', e.message); }
 };
 $('#btnCopyPub').onclick = ()=>navigator.clipboard && navigator.clipboard.writeText(pubKey);
@@ -292,7 +388,16 @@ async function loadAudit(){
 $('#btnReloadAudit').onclick = loadAudit;
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-boot().catch(e=>{ document.body.innerHTML='<div class="center"><div class="authbox"><h1>Error</h1><div class="sub">'+esc(e.message)+'</div></div></div>'; });
+/* ---- init theme + lang, then boot ---- */
+function $(s){ return document.querySelector(s); }
+(function init(){
+  let th='system'; try{ th=localStorage.getItem('cs.theme')||'system'; }catch(e){}
+  applyTheme(th);
+  let l=''; try{ l=localStorage.getItem('cs.lang')||''; }catch(e){}
+  if(!l){ l=(navigator.language||'en').toLowerCase().indexOf('ru')===0?'ru':'en'; }
+  $('#langSel').value = l; applyLang(l);
+  boot().catch(e=>{ document.body.innerHTML='<div class="center"><div class="authbox"><h1>Error</h1><div class="sub">'+esc(e.message)+'</div></div></div>'; });
+})();
 </script>
 </body>
 </html>
