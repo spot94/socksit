@@ -69,12 +69,15 @@ func (r *Runtime) applyUpdate() (applyResult, error) {
 	}
 
 	// Swap the installed exe: rename the running one aside, write the new one in
-	// its place. Renaming a running exe is allowed on Windows.
+	// its place. Renaming a running exe is itself allowed on Windows; the failure
+	// mode is a *leftover* socksit.exe.old still locked by a lingering old process
+	// (e.g. a previous panel/tray that didn't exit) or by antivirus — then
+	// replacing it fails with "Access is denied". Use a fresh backup name so we
+	// never have to replace a locked .old, and retry to ride out transient locks.
 	target := filepath.Join(InstallDir(), "socksit.exe")
-	oldPath := target + ".old"
-	_ = os.Remove(oldPath)
-	if err := os.Rename(target, oldPath); err != nil {
-		return applyResult{}, fmt.Errorf("set aside the current exe: %w", err)
+	oldPath := freshBackupPath(target)
+	if err := renameWithRetry(target, oldPath); err != nil {
+		return applyResult{}, fmt.Errorf("set aside the current exe — %s may be locked by a leftover SocksIt process or antivirus (close SocksIt windows or reboot, then retry): %w", target, err)
 	}
 	if err := os.WriteFile(target, appBytes, 0o755); err != nil {
 		_ = os.Rename(oldPath, target) // undo
@@ -92,6 +95,32 @@ func (r *Runtime) applyUpdate() (applyResult, error) {
 		return applyResult{}, fmt.Errorf("start the restart helper: %w", err)
 	}
 	return applyResult{OK: true, Applied: true, Message: "Update " + m.Version + " downloaded — the service will restart to apply it."}, nil
+}
+
+// freshBackupPath returns where to move the current exe aside. It prefers
+// "<target>.old", but if that already exists and can't be removed (a lingering
+// old process is holding it), it falls back to a unique per-attempt name so the
+// move never has to replace a locked file — the historical cause of "rename …
+// Access is denied" during an update.
+func freshBackupPath(target string) string {
+	p := target + ".old"
+	if err := os.Remove(p); err == nil || errors.Is(err, os.ErrNotExist) {
+		return p
+	}
+	return fmt.Sprintf("%s.old-%d", target, os.Getpid())
+}
+
+// renameWithRetry renames from->to, retrying briefly so a transient lock (e.g. an
+// antivirus scanning the file) doesn't fail the whole update on the first try.
+func renameWithRetry(from, to string) error {
+	var err error
+	for i := 0; i < 8; i++ {
+		if err = os.Rename(from, to); err == nil {
+			return nil
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	return err
 }
 
 // RunUpdateRestart is the detached helper: it stops the service, starts the new
