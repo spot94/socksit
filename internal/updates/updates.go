@@ -125,20 +125,21 @@ func Check(ctx context.Context, client *http.Client, endpoint, channel, current 
 // Newer reports whether version a is strictly newer than b.
 func Newer(a, b string) bool { return compareVersions(a, b) > 0 }
 
-// Verify checks a detached base64 Ed25519 signature over body against the baked
-// trusted keys (same keys as the update manifest). Used for the managed-config
-// feed. Returns an error if no key is compiled in or the signature is invalid.
-func Verify(body []byte, sigB64 string) error {
-	keys := trustedKeys()
-	if len(keys) == 0 {
-		return errors.New("no trusted key is compiled into this build")
+// VerifyWithKeyB64 checks a detached base64 Ed25519 signature over body against a
+// single base64 Ed25519 public key. The managed-config feed uses this with an
+// OPERATOR-provisioned key (config_source.pubkey), not the app author's baked
+// key — so any deployment can run its own signed config channel with its own key.
+func VerifyWithKeyB64(body []byte, sigB64, pubB64 string) error {
+	pubRaw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(pubB64))
+	if err != nil || len(pubRaw) != ed25519.PublicKeySize {
+		return errors.New("invalid trusted public key (config_source.pubkey)")
 	}
 	sig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(sigB64))
 	if err != nil {
 		return fmt.Errorf("bad signature encoding: %w", err)
 	}
-	if !verify(keys, body, sig) {
-		return errors.New("signature is not valid")
+	if !ed25519.Verify(ed25519.PublicKey(pubRaw), body, sig) {
+		return errors.New("signature does not match the configured key")
 	}
 	return nil
 }

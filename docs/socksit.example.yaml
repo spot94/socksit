@@ -41,4 +41,7 @@ update:
 config_source:                # optional "managed config": pull this file from a URL
   url: ""                     # empty = use this local file; e.g. https://host/socksit.yaml
   interval: 1h                # refresh period (also fetched on service start), min 1m
-  signed: true                # require a matching <url>.sig (Ed25519, built-in key) — recommended
+  signed: true                # require a matching <url>.sig — recommended
+  pubkey: ""                  # YOUR base64 Ed25519 public key (from `mksign genkey`) that
+                              # verifies the feed. Operator-provisioned, not the app author's.
+                              # sign configs with the matching private key: mksign sign-config

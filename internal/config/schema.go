@@ -4,6 +4,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net"
 	"net/url"
@@ -59,6 +60,12 @@ type ConfigSource struct {
 	Interval string `yaml:"interval"`
 	// Signed requires a matching <url>.sig; true (default) is strongly recommended.
 	Signed *bool `yaml:"signed"`
+	// PubKey is the base64 Ed25519 public key that verifies the feed's signature.
+	// It is provisioned by the operator (NOT the app author): each deployment runs
+	// its own signed config channel with its own key. Generate a pair with
+	// `mksign genkey`, put the public half here, sign configs with the private half.
+	// It is preserved across remote fetches, so a hostile server can't replace it.
+	PubKey string `yaml:"pubkey"`
 }
 
 // Update modes.
@@ -259,6 +266,11 @@ func (c *Config) Validate() error {
 		pu, err := url.Parse(u)
 		if err != nil || pu.Host == "" || (pu.Scheme != "http" && pu.Scheme != "https") {
 			return fmt.Errorf("config_source.url: must be an http(s) URL, got %q", u)
+		}
+	}
+	if pk := strings.TrimSpace(c.ConfigSource.PubKey); pk != "" {
+		if raw, err := base64.StdEncoding.DecodeString(pk); err != nil || len(raw) != 32 {
+			return fmt.Errorf("config_source.pubkey: must be a base64 32-byte Ed25519 public key")
 		}
 	}
 	return nil

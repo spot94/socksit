@@ -5,10 +5,12 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -94,13 +96,19 @@ func (r *Runtime) fetchConfig(ctx context.Context) (configFetchResult, error) {
 		return res, err
 	}
 	if cfg.ConfigSigned() {
+		if strings.TrimSpace(cfg.ConfigSource.PubKey) == "" {
+			err := errors.New("config_source.signed is on but no trusted key (pubkey) is set")
+			res.Error = err.Error()
+			r.lastConfig.Store(&res)
+			return res, err
+		}
 		sig, err := httpGetBytes(cctx, client, cfg.ConfigSource.URL+".sig", 64<<10)
 		if err != nil {
 			res.Error = "signature: " + err.Error()
 			r.lastConfig.Store(&res)
 			return res, err
 		}
-		if err := updates.Verify(body, string(sig)); err != nil {
+		if err := updates.VerifyWithKeyB64(body, string(sig), cfg.ConfigSource.PubKey); err != nil {
 			res.Error = "signature: " + err.Error()
 			r.lastConfig.Store(&res)
 			return res, err

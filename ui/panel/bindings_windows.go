@@ -71,6 +71,7 @@ type configView struct {
 	CfgURL        string   `json:"cfgUrl"`
 	CfgInterval   string   `json:"cfgInterval"`
 	CfgSigned     bool     `json:"cfgSigned"`
+	CfgPubKey     string   `json:"cfgPubKey"`
 }
 
 type saveInput struct {
@@ -87,6 +88,7 @@ type saveInput struct {
 	CfgURL        string   `json:"cfgUrl"`
 	CfgInterval   string   `json:"cfgInterval"`
 	CfgSigned     bool     `json:"cfgSigned"`
+	CfgPubKey     string   `json:"cfgPubKey"`
 }
 
 type result struct {
@@ -317,6 +319,7 @@ func (a *app) getConfig() configView {
 		CfgURL:        c.ConfigSource.URL,
 		CfgInterval:   c.ConfigSource.Interval,
 		CfgSigned:     c.ConfigSigned(),
+		CfgPubKey:     c.ConfigSource.PubKey,
 	}
 }
 
@@ -344,6 +347,7 @@ func (a *app) saveConfig(in saveInput) result {
 	}
 	cs := in.CfgSigned
 	c.ConfigSource.Signed = &cs
+	c.ConfigSource.PubKey = strings.TrimSpace(in.CfgPubKey)
 
 	b, err := yaml.Marshal(c)
 	if err != nil {
