@@ -41,18 +41,48 @@ kill_switch: true       # true = при падении туннеля прокс
 
 ## CLI
 
+Полный список команд — `socksit help`; флаги конкретной команды — `socksit help <команда>`
+(или `socksit <команда> -h`). Команды `config`, `status`, `doctor` работают с **запущенной
+службой** через локальный управляющий канал; когда служба остановлена, редактирующие команды
+`config` правят файл `%ProgramData%\SocksIt\socksit.yaml` напрямую (при следующем старте он
+подхватится). Флаг `--json` у большинства команд даёт машиночитаемый вывод для скриптов.
+
 ```powershell
-socksit gen   -c socksit.yaml [-o config.json]   # показать/сохранить сгенерированный конфиг движка
-socksit check -c socksit.yaml                     # проверить конфиг через `sing-box check`
-socksit install | uninstall                       # регистрация/удаление службы (admin)
-socksit service | run                             # запуск как службы / интерактивно
-socksit version
+# Служба
+socksit install | uninstall              # регистрация/удаление службы (admin)
+socksit start | stop | restart           # управление службой
+socksit status [--json]                  # состояние службы и туннеля
+socksit setup                            # turnkey: установка + пресет + запуск (admin)
+
+# Конфигурация
+socksit config show [--json] [--effective]      # показать конфиг (пароль скрыт; --effective — с учётом канала)
+socksit config validate [-c f.yaml]             # проверить через sing-box   (алиас: socksit check)
+socksit config gen [-c f.yaml] [-o out.json]    # сгенерировать конфиг движка (алиас: socksit gen)
+socksit config apply -c f.yaml                  # валидировать файл и загрузить в службу
+socksit config app add|rm|list <app.exe> ...    # приложения в маршрутизируемом наборе
+socksit config subnet add|rm|list <CIDR> ...    # прямые (direct) подсети
+
+# Диагностика
+socksit doctor [--json]                  # сводка: движок, служба, конфиг, управляющий канал
+socksit proxytest [--json]               # проверка upstream SOCKS5 (reachability + handshake)
+socksit logs [-n N] [-f] [--audit]       # хвост журнала (runtime; --audit — аудит-лог)
+
+socksit version [--json]
 ```
+
+Старые команды `gen` и `check` сохранены как алиасы `config gen` / `config validate`.
 
 ## Диагностика
 
-- Аудит действий: `%ProgramData%\SocksIt\audit.log` (кто → что → над чем).
-- Статистика по приложениям (соединения/трафик) — через окно статистики (U10) поверх
-  Clash API движка на loopback; до появления UI доступна как JSON через IPC-операцию `stats`.
+- Быстрая сводка окружения: `socksit doctor` (движок на месте, служба установлена/запущена,
+  конфиг валиден, управляющий канал доступен). `--json` — для мониторинга.
+- Журналы: `socksit logs` (runtime-лог службы) и `socksit logs --audit`
+  (`%ProgramData%\SocksIt\audit.log` — кто → что → над чем). `-f` — следить в реальном времени.
+- Проверка прокси: `socksit proxytest`. Учтите — пароль SOCKS хранится в защищённом хранилище
+  службы (DPAPI), не в YAML; если прокси требует авторизацию, CLI-проверка может показать
+  «нужна авторизация» даже когда через панель (с сохранёнными данными) тест проходит —
+  результат по доступности и SOCKS5-рукопожатию всё равно информативен.
+- Статистика по приложениям (соединения/трафик) — через окно статистики поверх Clash API
+  движка на loopback; также доступна как JSON через IPC-операцию `stats`.
 - Проверка, что прокси действительно меняет IP: сравните внешний IP до/после в проксируемом
   приложении (например, страницей проверки IP) — как в приёмочных примерах AE1/AE2 плана.
