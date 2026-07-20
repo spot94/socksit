@@ -146,6 +146,13 @@ type Proxy struct {
 	// UDP enables UDP ASSOCIATE on the outbound. Defaults to true; if the server
 	// lacks UDP the engine simply has no UDP path (see plan R13).
 	UDP *bool `yaml:"udp"`
+	// Interface optionally pins the local network adapter used to DIAL the SOCKS
+	// server, by name (e.g. "Ethernet 2"). Needed when the proxy is reachable only
+	// via a split-tunnel VPN (e.g. Cisco AnyConnect): otherwise sing-box's
+	// auto_detect_interface binds the dial to the physical default interface and it
+	// times out. Empty (default) = auto-resolved at runtime from the OS route to the
+	// proxy; a domain proxy is not auto-resolved. Client-local, never fed remotely.
+	Interface string `yaml:"interface,omitempty"`
 }
 
 // DNS carries the fake-ip range for the (IPv4-only) datapath.

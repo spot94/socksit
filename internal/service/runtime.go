@@ -160,6 +160,7 @@ func (r *Runtime) superviseLoop(ctx context.Context) error {
 			}
 			continue
 		}
+		r.resolveProxyEgress(cfg) // pin the SOCKS dial to the adapter that reaches the proxy (VPN-safe)
 		js, err := singbox.GenerateJSON(cfg)
 		if err == nil {
 			err = os.WriteFile(r.genPath(), js, 0o600)
@@ -247,6 +248,55 @@ func (r *Runtime) effectiveConfig() (*config.Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// resolveProxyEgress pins proxy.interface (in memory, for this generation only)
+// to the local adapter that actually reaches the SOCKS server. Without it,
+// sing-box's auto_detect_interface binds the proxy dial to the physical default
+// interface, so a proxy reachable only via a split-tunnel VPN (e.g. Cisco
+// AnyConnect) times out. No-op if the user pinned proxy.interface, or the proxy is
+// a domain (only IP proxies are auto-resolved). Re-runs on every (re)start, so a
+// VPN connected before start/apply is picked up automatically.
+func (r *Runtime) resolveProxyEgress(cfg *config.Config) {
+	if strings.TrimSpace(cfg.Proxy.Interface) != "" {
+		return // explicit user override wins
+	}
+	if net.ParseIP(strings.TrimSpace(cfg.Proxy.Address)) == nil {
+		return // domain proxy: can't route-resolve a name here, leave to auto_detect
+	}
+	if name := interfaceForDest(cfg.Proxy.Address, cfg.Proxy.Port); name != "" {
+		cfg.Proxy.Interface = name
+		r.logf("INFO", "proxy %s:%d reached via interface %q — binding the SOCKS dial to it", cfg.Proxy.Address, cfg.Proxy.Port, name)
+	}
+}
+
+// interfaceForDest returns the name of the local interface the OS would use to
+// reach host:port, honouring the routing table (so a more-specific VPN route wins
+// over SocksIt's own default-into-TUN). The UDP "connect" sends no packets — it
+// only makes the OS choose a source address, which we map back to an interface.
+func interfaceForDest(host string, port int) string {
+	conn, err := net.Dial("udp", net.JoinHostPort(host, strconv.Itoa(port)))
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+	ua, ok := conn.LocalAddr().(*net.UDPAddr)
+	if !ok || ua.IP == nil || ua.IP.IsUnspecified() {
+		return ""
+	}
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+	for _, ifc := range ifaces {
+		addrs, _ := ifc.Addrs()
+		for _, a := range addrs {
+			if ipn, ok := a.(*net.IPNet); ok && ipn.IP.Equal(ua.IP) {
+				return ifc.Name
+			}
+		}
+	}
+	return ""
 }
 
 type creds struct {

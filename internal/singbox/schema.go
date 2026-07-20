@@ -60,6 +60,11 @@ type Outbound struct {
 	Version    string `json:"version,omitempty"`
 	Username   string `json:"username,omitempty"`
 	Password   string `json:"password,omitempty"`
+	// BindInterface pins the local interface used to DIAL this outbound's server
+	// (dial option). Set on the proxy outbound so the SOCKS server, when reachable
+	// only via a split-tunnel VPN, is dialed through that adapter instead of the
+	// auto-detected physical default.
+	BindInterface string `json:"bind_interface,omitempty"`
 }
 
 type Route struct {

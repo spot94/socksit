@@ -146,11 +146,12 @@ func GenerateJSON(c *config.Config) ([]byte, error) {
 
 func proxyOutbound(c *config.Config) Outbound {
 	o := Outbound{
-		Type:       "socks",
-		Tag:        tagProxy,
-		Server:     c.Proxy.Address,
-		ServerPort: c.Proxy.Port,
-		Version:    "5",
+		Type:          "socks",
+		Tag:           tagProxy,
+		Server:        c.Proxy.Address,
+		ServerPort:    c.Proxy.Port,
+		Version:       "5",
+		BindInterface: strings.TrimSpace(c.Proxy.Interface), // dial the proxy via this adapter (e.g. a VPN); empty = auto
 	}
 	if c.Proxy.Username != "" {
 		o.Username = c.Proxy.Username
