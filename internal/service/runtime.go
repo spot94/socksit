@@ -397,6 +397,11 @@ func (r *Runtime) Status() (any, error) {
 		}
 	}
 	m := map[string]any{"enabled": r.enabled.Load(), "state": state, "pid": pid, "version": r.Version}
+	// Whether SOCKS credentials are stored (drives the panel's "Authentication"
+	// checkbox). Only the service (SYSTEM) can read the DPAPI blob.
+	if u, _, ok := r.loadCreds(); ok && strings.TrimSpace(u) != "" {
+		m["has_creds"] = true
+	}
 	// Add a config summary for the UI. This is read-only display data and never
 	// includes secrets (credentials live only in the DPAPI blob, not the YAML).
 	if b, err := os.ReadFile(r.configPath()); err == nil {
@@ -446,6 +451,15 @@ func (r *Runtime) SetConfig(yamlText string) error {
 }
 
 func (r *Runtime) SetCredentials(user, pass string) error {
+	if user == "" && pass == "" {
+		// Empty means "clear the stored credentials" (auth turned off in the panel).
+		// No-op — and no restart — if there was nothing stored.
+		if _, err := os.Stat(r.credsPath()); err == nil {
+			_ = os.Remove(r.credsPath())
+			r.signalRestart()
+		}
+		return nil
+	}
 	b, _ := json.Marshal(creds{User: user, Pass: pass})
 	if err := secretStore().SaveTo(r.credsPath(), string(b)); err != nil {
 		return err

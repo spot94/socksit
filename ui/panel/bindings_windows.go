@@ -61,6 +61,9 @@ type stateView struct {
 	// UpdateAvailable is the newer version the service found (notify mode); empty
 	// when up to date or in auto mode. Drives the in-panel update banner.
 	UpdateAvailable string `json:"updateAvailable"`
+	// HasCreds reports whether SOCKS credentials are stored — sets the initial
+	// state of the panel's "Authentication" checkbox.
+	HasCreds bool `json:"hasCreds"`
 }
 
 type configView struct {
@@ -89,6 +92,7 @@ type saveInput struct {
 	Port          int      `json:"port"`
 	Username      string   `json:"username"`
 	Password      string   `json:"password"`
+	Auth          bool     `json:"auth"` // false = no authentication → clear stored credentials
 	Mode          string   `json:"mode"`
 	KillSwitch    bool     `json:"killSwitch"`
 	ShowTray      bool     `json:"showTray"`
@@ -132,6 +136,7 @@ type ipcStatus struct {
 	PID             int    `json:"pid"`
 	Version         string `json:"version"`          // the running service's build version
 	UpdateAvailable string `json:"update_available"` // newer version (notify mode); empty otherwise
+	HasCreds        bool   `json:"has_creds"`        // SOCKS credentials are stored
 }
 
 func (a *app) bind() {
@@ -315,6 +320,7 @@ func (a *app) state() stateView {
 				s.Version = st.Version
 			}
 			s.UpdateAvailable = st.UpdateAvailable
+			s.HasCreds = st.HasCreds
 			switch {
 			case !st.Enabled:
 				s.Engine = "paused"
@@ -403,7 +409,12 @@ func (a *app) saveConfig(in saveInput) result {
 	}
 
 	credMsg := ""
-	if strings.TrimSpace(in.Username) != "" || in.Password != "" {
+	switch {
+	case !in.Auth:
+		// Authentication off → clear stored credentials (a no-op server-side if
+		// none). Best effort: like setting them, it silently needs a running service.
+		_, _ = ipc.Call(a.pipe, ipc.Request{Op: ipc.OpSetCreds, Args: map[string]string{"user": "", "pass": ""}}, callTimeout)
+	case strings.TrimSpace(in.Username) != "" || in.Password != "":
 		if r, err := ipc.Call(a.pipe, ipc.Request{Op: ipc.OpSetCreds, Args: map[string]string{"user": strings.TrimSpace(in.Username), "pass": in.Password}}, callTimeout); err != nil || !r.OK {
 			credMsg = a.tr(" Credentials need a running service — start it, then re-enter them.",
 				" Для учётных данных нужна работающая служба — запустите её и введите заново.")
