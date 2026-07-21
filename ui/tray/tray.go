@@ -45,7 +45,14 @@ type statusView struct {
 	State   string `json:"state"`
 	Proxy   string `json:"proxy"`
 	Version string `json:"version"` // the running service's build version
+	// UpdateAvailable is the newer version the service found (notify mode only);
+	// empty when up to date or in auto mode.
+	UpdateAvailable string `json:"update_available"`
 }
+
+// notifiedVer is the last update version we showed a balloon for, so we notify
+// once per version rather than every poll.
+var notifiedVer string
 
 // Run shows the tray and blocks until it quits. It is a singleton (a second
 // instance exits immediately) and exits on its own once the service is
@@ -86,6 +93,8 @@ func onReady(pipe, version string) {
 
 	mStatus := systray.AddMenuItem("SocksIt — …", "Current state")
 	mStatus.Disable()
+	mUpdate := systray.AddMenuItem("", "A new version is available — click to open and install")
+	mUpdate.Hide()
 	systray.AddSeparator()
 	mToggle := systray.AddMenuItemCheckbox("Proxying enabled", "Pause or resume proxying", true)
 	systray.AddSeparator()
@@ -94,7 +103,7 @@ func onReady(pipe, version string) {
 	mVersion := systray.AddMenuItem("SocksIt "+version, "Version (engine: sing-box v1.13.14)")
 	mVersion.Disable()
 
-	go pollStatus(pipe, version, mStatus, mToggle)
+	go pollStatus(pipe, version, mStatus, mToggle, mUpdate)
 
 	go func() {
 		for {
@@ -102,6 +111,8 @@ func onReady(pipe, version string) {
 			case <-mToggle.ClickedCh:
 				toggle(pipe)
 			case <-mOpen.ClickedCh:
+				launchSelf()
+			case <-mUpdate.ClickedCh:
 				launchSelf()
 			}
 		}
@@ -115,7 +126,7 @@ func launchSelf() {
 	}
 }
 
-func pollStatus(pipe, version string, status, toggle *systray.MenuItem) {
+func pollStatus(pipe, version string, status, toggle, update *systray.MenuItem) {
 	for {
 		// Presence is bound to the service and the "Show in tray" setting.
 		if installed, _, err := service.Status(); err == nil && !installed {
@@ -126,7 +137,7 @@ func pollStatus(pipe, version string, status, toggle *systray.MenuItem) {
 			systray.Quit()
 			return
 		}
-		if updateMenu(pipe, version, status, toggle) {
+		if updateMenu(pipe, version, status, toggle, update) {
 			// The service now runs a different build than this tray (an update was
 			// applied) — exit so the keeper respawns a tray from the new binary.
 			systray.Quit()
@@ -138,7 +149,7 @@ func pollStatus(pipe, version string, status, toggle *systray.MenuItem) {
 
 // updateMenu refreshes the menu from the service status and reports whether this
 // tray is stale (the service reports a different build than our own version).
-func updateMenu(pipe, version string, status, toggle *systray.MenuItem) (stale bool) {
+func updateMenu(pipe, version string, status, toggle, update *systray.MenuItem) (stale bool) {
 	resp, err := ipc.Call(pipe, ipc.Request{Op: ipc.OpStatus}, callTimeout)
 	if err != nil || !resp.OK {
 		installed, running, _ := service.Status()
@@ -149,12 +160,14 @@ func updateMenu(pipe, version string, status, toggle *systray.MenuItem) (stale b
 		status.SetTitle("SocksIt — " + head)
 		toggle.Uncheck()
 		toggle.Disable()
+		update.Hide()
 		systray.SetTooltip("SocksIt — " + head)
 		return false
 	}
 	var s statusView
 	if json.Unmarshal(resp.Data, &s) != nil {
 		status.SetTitle("SocksIt — unknown")
+		update.Hide()
 		return false
 	}
 	// A version mismatch means an update swapped the binary and restarted the
@@ -173,6 +186,17 @@ func updateMenu(pipe, version string, status, toggle *systray.MenuItem) (stale b
 	tip := "SocksIt — " + head
 	if s.Proxy != "" && s.Proxy != "(not set)" {
 		tip += " · " + s.Proxy
+	}
+	if s.UpdateAvailable != "" {
+		update.SetTitle("↑ Update " + s.UpdateAvailable + " available — open")
+		update.Show()
+		tip += " · update " + s.UpdateAvailable
+		if notifiedVer != s.UpdateAvailable {
+			notifiedVer = s.UpdateAvailable
+			showBalloon("SocksIt", "Update "+s.UpdateAvailable+" is available. Open SocksIt to install.")
+		}
+	} else {
+		update.Hide()
 	}
 	systray.SetTooltip(tip)
 	return false

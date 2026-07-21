@@ -74,11 +74,32 @@ func (r *Runtime) superviseUpdates(ctx context.Context) {
 				r.logf("WARN", "update check failed: %v", err)
 			} else if res := r.lastUpdate.Load(); res != nil && res.HasUpdate {
 				r.logf("INFO", "update available: %s (current %s)", res.Available, res.Current)
+				if strings.EqualFold(cfg.Update.Mode, config.UpdateAuto) {
+					r.maybeAutoApply(res.Available)
+				}
 			}
 			next = cfg.CheckEvery()
 		}
 		timer.Reset(next)
 	}
+}
+
+// maybeAutoApply installs an available update (auto mode), at most once per
+// version. The dedupe stops the same version being re-attempted every interval if
+// an apply keeps failing; a successful apply restarts the service into the new
+// build anyway (so Newer() is false next time).
+func (r *Runtime) maybeAutoApply(version string) {
+	if v, _ := r.autoApplied.Load().(string); v == version {
+		return
+	}
+	r.autoApplied.Store(version)
+	r.logf("INFO", "update: mode=auto — downloading and applying %s", version)
+	res, err := r.applyUpdate()
+	if err != nil {
+		r.logf("ERROR", "auto-update failed: %v", err)
+		return
+	}
+	r.logf("INFO", "auto-update: %s", res.Message)
 }
 
 // lenientConfig reads the config without requiring a fully-valid proxy (so update

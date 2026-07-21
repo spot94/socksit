@@ -59,7 +59,8 @@ type Runtime struct {
 	sup        atomic.Pointer[engine.Supervisor]
 	restartCh  chan struct{}
 	log        io.Writer
-	lastUpdate atomic.Pointer[updates.Result]
+	lastUpdate  atomic.Pointer[updates.Result]
+	autoApplied atomic.Value // string: last version auto-applied, so auto mode won't re-attempt the same one
 	lastConfig atomic.Pointer[configFetchResult]
 }
 
@@ -410,6 +411,11 @@ func (r *Runtime) Status() (any, error) {
 		m["apps"] = len(c.Apps)
 		m["mode"] = c.Mode
 		m["kill_switch"] = c.KillSwitchOn()
+		// Surface an available update so the tray can notify. Only in notify mode:
+		// auto installs it itself, so there is nothing for the user to act on.
+		if res := r.lastUpdate.Load(); res != nil && res.HasUpdate && strings.EqualFold(c.Update.Mode, config.UpdateNotify) {
+			m["update_available"] = res.Available
+		}
 	}
 	return m, nil
 }
