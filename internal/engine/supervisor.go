@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"os/exec"
 	"sync"
 	"sync/atomic"
@@ -74,6 +75,7 @@ func (o *Options) applyDefaults() {
 type Supervisor struct {
 	opts  Options
 	pid   atomic.Int64
+	proc  atomic.Pointer[os.Process] // current engine process, for a direct kill on cancel
 	state atomic.Int32
 	mu    sync.Mutex
 }
@@ -108,9 +110,15 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	defer job.close() // kill-on-close guarantees no orphan if we exit abnormally
 
 	// Kill the engine promptly when the context is cancelled so cmd.Wait returns.
+	// TerminateJobObject is a no-op if assignPID failed and the child was never in
+	// the job, so also kill the process directly — otherwise cmd.Wait (and every
+	// caller waiting on us) blocks forever.
 	go func() {
 		<-ctx.Done()
 		job.terminate()
+		if p := s.proc.Load(); p != nil {
+			_ = p.Kill()
+		}
 	}()
 
 	backoff := s.opts.MinBackoff
@@ -131,13 +139,16 @@ func (s *Supervisor) Run(ctx context.Context) error {
 			s.pid.Store(0)
 		} else {
 			s.pid.Store(int64(cmd.Process.Pid))
+			s.proc.Store(cmd.Process) // enable the direct-kill fallback on cancel
 			if err := job.assignPID(cmd.Process.Pid); err != nil {
 				// Not fatal to routing, but log-worthy: without assignment the
-				// kill-on-close guarantee is lost for this child.
+				// kill-on-close guarantee is lost for this child (the direct
+				// Process.Kill on cancel covers it).
 				fmt.Fprintf(discard(s.opts.Stdout), "supervisor: assign to job failed: %v\n", err)
 			}
 			go s.watchReady(ctx, start)
 			_ = cmd.Wait()
+			s.proc.Store(nil)
 		}
 		s.pid.Store(0)
 

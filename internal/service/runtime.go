@@ -191,12 +191,12 @@ func (r *Runtime) superviseLoop(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			cancel()
-			<-done
+			r.awaitEngineStop(done)
 			r.sup.Store(nil)
 			return ctx.Err()
 		case <-r.restartCh:
 			cancel()
-			<-done
+			r.awaitEngineStop(done)
 			r.sup.Store(nil)
 			// loop: regenerate with the new config / after the network change
 		case <-done:
@@ -207,6 +207,23 @@ func (r *Runtime) superviseLoop(ctx context.Context) error {
 				return ctx.Err()
 			}
 		}
+	}
+}
+
+// engineStopTimeout bounds how long superviseLoop waits for the engine to stop
+// after cancelling it. The supervisor force-kills the child on cancel, so this is
+// a backstop: if the engine is somehow unkillable we log and move on instead of
+// wedging shutdown/restart forever (the OS reaps it via the job's kill-on-close
+// when the service process exits).
+const engineStopTimeout = 8 * time.Second
+
+// awaitEngineStop waits for the supervisor goroutine to finish, bounded so a stuck
+// child can never block the loop indefinitely.
+func (r *Runtime) awaitEngineStop(done <-chan struct{}) {
+	select {
+	case <-done:
+	case <-time.After(engineStopTimeout):
+		r.logf("ERROR", "engine did not stop within %s after cancel — continuing without blocking", engineStopTimeout)
 	}
 }
 

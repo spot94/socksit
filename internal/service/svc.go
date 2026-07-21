@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/debug"
@@ -16,6 +17,12 @@ import (
 
 // ServiceName is the Windows service identifier.
 const ServiceName = "SocksIt"
+
+// stopGrace bounds how long Execute waits for the runtime to unwind on Stop.
+// Kept below the SCM's stop timeout: if the runtime is wedged we return anyway,
+// which exits the process — its job object then closes and the engine dies via
+// kill-on-close, so the service never gets stuck in StopPending.
+const stopGrace = 15 * time.Second
 
 func secretStore() *secret.Store { return secret.New(credentialEntropy) }
 
@@ -57,7 +64,13 @@ func (h *handler) Execute(_ []string, req <-chan svc.ChangeRequest, status chan<
 			case svc.Stop, svc.Shutdown:
 				status <- svc.Status{State: svc.StopPending}
 				cancel()
-				<-errc
+				select {
+				case <-errc:
+				case <-time.After(stopGrace):
+					// Runtime didn't unwind in time — stop anyway. Returning exits
+					// the process; its job object closes and the engine is reaped by
+					// kill-on-close. Prevents a wedged StopPending.
+				}
 				return false, 0
 			}
 		case <-errc:
