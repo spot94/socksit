@@ -189,9 +189,9 @@ func Default() *Config {
 	return &Config{
 		Proxy: Proxy{Port: 1080, UDP: &udp},
 		Apps:  []string{},
-		// Private (RFC 1918) ranges bypass the proxy by default — LAN traffic
-		// should stay direct out of the box.
-		DirectSubnets: []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"},
+		// Loopback and private (RFC 1918) ranges bypass the proxy by default —
+		// loopback and LAN traffic should stay direct out of the box.
+		DirectSubnets: []string{"127.0.0.1/32", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"},
 		Mode:          ModeAllowlist,
 		KillSwitch:    &on,
 		ShowTray:      &tray,

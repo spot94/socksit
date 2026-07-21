@@ -246,7 +246,10 @@
           <label class="fld wide"><span data-i18n="cfg.url">Config URL</span><input type="text" id="cfgUrl" data-i18n-ph="cfg.urlPh"></label>
           <label class="fld"><span data-i18n="cfg.interval">Refresh interval</span><input type="text" id="cfgInterval" placeholder="1h"></label>
           <label class="fld"><span data-i18n="cfg.merge">On update</span><select id="cfgMerge"><option value="replace" data-i18n="cfg.merge.replace">Replace config</option><option value="override" data-i18n="cfg.merge.override">Override fields</option></select></label>
-          <label class="fld"><span data-i18n="cfg.proxy">Feed proxy</span><input type="text" id="cfgProxy" data-i18n-ph="cfg.proxyPh"></label>
+          <label class="fld"><span data-i18n="cfg.proxy">Feed proxy</span><select id="cfgProxy">
+            <option value="" data-i18n="proxymode.direct">Direct</option>
+            <option value="system" data-i18n="proxymode.system">System proxy</option>
+            <option value="use-socks" data-i18n="proxymode.socks">Through the SOCKS proxy</option></select></label>
           <label class="switch" style="align-self:end;height:38px"><input type="checkbox" id="cfgSigned"><span class="track"></span><span data-i18n="cfg.signed">Require signature</span></label>
           <label class="fld wide"><span data-i18n="cfg.pubkey">Trusted key (base64)</span><input type="text" id="cfgPubKey" class="mono" data-i18n-ph="cfg.pubkeyPh"></label>
         </div>
@@ -320,13 +323,15 @@
         <h3 data-i18n="upd.title">Updates</h3>
         <div class="form" style="margin-top:8px">
           <label class="fld wide"><span data-i18n="upd.endpoint">Update source (URL)</span><input type="text" id="uEndpoint" data-i18n-ph="upd.endpointPh"></label>
-          <label class="fld"><span data-i18n="upd.channel">Channel</span><input type="text" id="uChannel" placeholder="stable"></label>
           <label class="fld"><span data-i18n="upd.mode">Mode</span><select id="uMode">
             <option value="off" data-i18n="upd.mode.off">Off</option>
             <option value="notify" data-i18n="upd.mode.notify">Notify</option>
             <option value="auto" data-i18n="upd.mode.auto">Auto</option></select></label>
           <label class="fld"><span data-i18n="upd.interval">Check interval</span><input type="text" id="uInterval" placeholder="24h"></label>
-          <label class="fld wide"><span data-i18n="upd.proxy">Proxy for checks</span><input type="text" id="uProxy" data-i18n-ph="upd.proxyPh"></label>
+          <label class="fld wide"><span data-i18n="upd.proxy">Proxy for checks</span><select id="uProxy">
+            <option value="" data-i18n="proxymode.direct">Direct</option>
+            <option value="system" data-i18n="proxymode.system">System proxy</option>
+            <option value="use-socks" data-i18n="proxymode.socks">Through the SOCKS proxy</option></select></label>
         </div>
         <div class="row" style="margin-top:12px">
           <button class="primary" id="btnUpdSave" data-i18n="upd.save">Save</button>
@@ -374,6 +379,7 @@ const I18N = {
     'upd.title':'Updates','upd.endpoint':'Update source (URL)','upd.endpointPh':'https://github.com/<owner>/<repo>/releases/latest/download',
     'upd.channel':'Channel','upd.mode':'Mode','upd.mode.off':'Off','upd.mode.notify':'Notify','upd.mode.auto':'Auto',
     'upd.interval':'Check interval','upd.proxy':'Proxy for checks','upd.proxyPh':'empty=direct · system · use-socks · socks5://host:port',
+    'proxymode.direct':'Direct','proxymode.system':'System proxy','proxymode.socks':'Through the SOCKS proxy',
     'upd.save':'Save','upd.check':'Check now','upd.apply':'Apply update','upd.applying':'Downloading and applying…','upd.restarting':'Update installed — restarting the panel…','upd.upToDate':'Up to date (v{v})','upd.available':'Update available: v{v}','upd.checking':'Checking…','upd.hint':'Trust is verified by signature — the source/CDN is untrusted.',
     'cfg.title':'Config source (optional)','cfg.url':'Config URL','cfg.urlPh':'https://…/socksit.yaml — empty = local config','cfg.interval':'Refresh interval','cfg.merge':'On update','cfg.merge.replace':'Replace config','cfg.merge.override':'Override fields','cfg.proxy':'Feed proxy','cfg.proxyPh':'empty = direct · system · use-socks · socks5://host:port','cfg.mergeHint':'Replace: the whole local config is swapped for the remote one. Override: only the fields the remote specifies change; your other settings are kept, and the proxied apps are the remote list plus your own.','cfg.managedApps':'Also proxied, from the managed config:','cfg.managedTag':'managed','cfg.managedSubnets':'Also direct, from the managed config:','cfg.rotate.title':'Key rotation requested','cfg.rotate.msg':'The config server asks to change the trusted key. Accepting moves the root of trust — only accept if you initiated this rotation.','cfg.rotate.accept':'Accept new key','cfg.rotate.decline':'Decline','cfg.rotate.confirm':'Change the trusted key to the proposed one? Only accept if you initiated this.','cfg.signed':'Require signature','cfg.pubkey':'Trusted key (base64)','cfg.pubkeyPh':'Ed25519 public key from `mksign genkey`','cfg.fetch':'Fetch now','cfg.fetching':'Fetching…','cfg.local':'Using the local config.','cfg.fetched':'Last fetched {t}','cfg.changed':' (updated)','cfg.hint':'When set, the config is pulled from this URL and applied automatically (on start and on the interval); local edits are overwritten on refresh. A signed feed (recommended) needs a matching <url>.sig verified with YOUR Trusted key — generate a keypair with `mksign genkey`, put the public half here, sign configs with the private half.'
   },
@@ -407,6 +413,7 @@ const I18N = {
     'upd.title':'Обновления','upd.endpoint':'Источник обновлений (URL)','upd.endpointPh':'https://github.com/<owner>/<repo>/releases/latest/download',
     'upd.channel':'Канал','upd.mode':'Режим','upd.mode.off':'Выкл','upd.mode.notify':'Уведомлять','upd.mode.auto':'Авто',
     'upd.interval':'Интервал проверки','upd.proxy':'Прокси для проверок','upd.proxyPh':'пусто=напрямую · system · use-socks · socks5://host:port',
+    'proxymode.direct':'Напрямую','proxymode.system':'Системный прокси','proxymode.socks':'Через SOCKS-прокси',
     'upd.save':'Сохранить','upd.check':'Проверить сейчас','upd.apply':'Установить обновление','upd.applying':'Скачивание и установка…','upd.restarting':'Обновление установлено — перезапуск панели…','upd.upToDate':'Актуальная версия (v{v})','upd.available':'Доступно обновление: v{v}','upd.checking':'Проверка…','upd.hint':'Подлинность проверяется подписью — источник/CDN недоверенный.',
     'cfg.title':'Источник конфига (опц.)','cfg.url':'URL конфига','cfg.urlPh':'https://…/socksit.yaml — пусто = локальный конфиг','cfg.interval':'Интервал обновления','cfg.merge':'При обновлении','cfg.merge.replace':'Заменять конфиг','cfg.merge.override':'Переопределять поля','cfg.proxy':'Proxy для конфига','cfg.proxyPh':'пусто = напрямую · system · use-socks · socks5://host:port','cfg.mergeHint':'Заменять: локальный конфиг целиком меняется на удалённый. Переопределять: меняются только поля, заданные в удалённом; остальные настройки сохраняются, а список приложений = удалённый плюс твои личные.','cfg.managedApps':'Также проксируются, из управляемого конфига:','cfg.managedTag':'из канала','cfg.managedSubnets':'Также напрямую, из управляемого конфига:','cfg.rotate.title':'Запрос на смену ключа','cfg.rotate.msg':'Сервер конфигурации просит сменить доверенный ключ. Принятие меняет корень доверия — принимай только если ты сам инициировал ротацию.','cfg.rotate.accept':'Принять новый ключ','cfg.rotate.decline':'Отклонить','cfg.rotate.confirm':'Сменить доверенный ключ на предложенный? Принимай только если ты это инициировал.','cfg.signed':'Требовать подпись','cfg.pubkey':'Доверенный ключ (base64)','cfg.pubkeyPh':'публичный Ed25519 из `mksign genkey`','cfg.fetch':'Обновить сейчас','cfg.fetching':'Обновление…','cfg.local':'Используется локальный конфиг.','cfg.fetched':'Обновлено {t}','cfg.changed':' (изменён)','cfg.hint':'Если задан — конфиг тянется по этому URL и применяется автоматически (при старте и по интервалу); локальные правки перезаписываются. Для подписанного канала (рекомендуется) нужен <url>.sig, проверяемый ТВОИМ доверенным ключом — сгенерируй пару `mksign genkey`, публичную половину впиши сюда, конфиги подписывай приватной.'
   }
@@ -583,6 +590,15 @@ function renderApps(){
     const tag=document.createElement('span'); tag.className='tag'; tag.textContent=t('cfg.managedTag'); li.appendChild(tag);
     ul.appendChild(li); }); }
 }
+// Set a proxy-mode <select>, preserving a custom value (e.g. socks5://host:port
+// from the YAML) as an extra option so a round-trip never clobbers it.
+function setProxySel(id, val){
+  const sel = g(id); val = (val||'').trim();
+  if(val && ![...sel.options].some(o=>o.value===val)){
+    const o=document.createElement('option'); o.value=val; o.textContent=val; sel.appendChild(o);
+  }
+  sel.value = val;
+}
 async function loadSettings(){
   const c = await call('appGetConfig');
   document.getElementById('fAddress').value = c.address||'';
@@ -603,7 +619,7 @@ async function loadSettings(){
   g('cfgUrl').value = c.cfgUrl||'';
   g('cfgInterval').value = c.cfgInterval||'1h';
   g('cfgMerge').value = c.cfgMerge || 'override';
-  g('cfgProxy').value = c.cfgProxy||'';
+  setProxySel('cfgProxy', c.cfgProxy);
   g('cfgSigned').checked = (c.cfgSigned !== false);
   g('cfgPubKey').value = c.cfgPubKey||'';
   const pend = c.cfgPendingPubKey||'';
@@ -728,13 +744,14 @@ document.getElementById('btnDiagCopy').onclick = ()=>{ const txt=document.getEle
 
 /* ---------- updates (About) ---------- */
 let lastUpd = null;
+let updChannel = 'stable'; // release channel is kept in the config but not shown in the UI
 async function loadUpdate(){
   const u = await call('appGetUpdate');
   g('uEndpoint').value = u.endpoint || '';
-  g('uChannel').value  = u.channel || 'stable';
+  updChannel           = u.channel || 'stable';
   g('uMode').value     = u.mode || 'notify';
   g('uInterval').value = u.checkInterval || '24h';
-  g('uProxy').value    = u.proxy || '';
+  setProxySel('uProxy', u.proxy);
   try{ lastUpd = await call('appUpdateStatus'); }catch(e){ lastUpd = null; }
   renderUpdateStatus();
 }
@@ -750,8 +767,8 @@ function renderUpdateStatus(){
   else { el.textContent = ''; }
 }
 g('btnUpdSave').onclick = async ()=>{ const b=g('updBanner'); banner(b,'info',t('msg.saving'));
-  const r = await call('appSaveUpdate', { endpoint:g('uEndpoint').value.trim(), channel:g('uChannel').value.trim()||'stable',
-    mode:g('uMode').value, checkInterval:g('uInterval').value.trim()||'24h', proxy:g('uProxy').value.trim() });
+  const r = await call('appSaveUpdate', { endpoint:g('uEndpoint').value.trim(), channel:updChannel,
+    mode:g('uMode').value, checkInterval:g('uInterval').value.trim()||'24h', proxy:g('uProxy').value });
   banner(b, r.ok?'ok':'err', r.message); };
 g('btnUpdCheck').onclick = async ()=>{ g('updStatus').textContent=t('upd.checking'); lastUpd = await job('startUpdateCheck'); renderUpdateStatus(); };
 g('btnUpdApply').onclick = async ()=>{
