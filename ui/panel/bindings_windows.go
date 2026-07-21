@@ -58,6 +58,9 @@ type stateView struct {
 	ShowTray   bool   `json:"showTray"`
 	Version    string `json:"version"`
 	StatusText string `json:"statusText"`
+	// UpdateAvailable is the newer version the service found (notify mode); empty
+	// when up to date or in auto mode. Drives the in-panel update banner.
+	UpdateAvailable string `json:"updateAvailable"`
 }
 
 type configView struct {
@@ -124,10 +127,11 @@ type statsView struct {
 
 // ipcStatus mirrors the fields returned by the service Runtime.Status.
 type ipcStatus struct {
-	Enabled bool   `json:"enabled"`
-	State   string `json:"state"`
-	PID     int    `json:"pid"`
-	Version string `json:"version"` // the running service's build version
+	Enabled         bool   `json:"enabled"`
+	State           string `json:"state"`
+	PID             int    `json:"pid"`
+	Version         string `json:"version"`          // the running service's build version
+	UpdateAvailable string `json:"update_available"` // newer version (notify mode); empty otherwise
 }
 
 func (a *app) bind() {
@@ -310,6 +314,7 @@ func (a *app) state() stateView {
 			if st.Version != "" {
 				s.Version = st.Version
 			}
+			s.UpdateAvailable = st.UpdateAvailable
 			switch {
 			case !st.Enabled:
 				s.Engine = "paused"

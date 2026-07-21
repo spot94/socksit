@@ -58,6 +58,11 @@
   .sidestat{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;overflow:hidden;min-width:0}
   .sidestat span.txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .foot-controls{display:flex;align-items:center;gap:8px}
+  .updnote{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;
+           color:var(--ok);background:#1a9c5316;border:1px solid #1a9c5340;border-radius:8px;
+           padding:6px 8px;text-decoration:none;line-height:1.25}
+  .updnote:hover{background:#1a9c5326}
+  .updnote::before{content:"↑";font-weight:700}
   .themebtn,.langsel{border:1px solid var(--border);background:var(--panel-2);color:var(--muted);
     border-radius:8px;cursor:pointer;height:30px;box-sizing:border-box}
   .themebtn{width:34px;padding:0;font-size:15px;display:inline-flex;align-items:center;justify-content:center}
@@ -162,6 +167,7 @@
       <a data-section="about"><span class="ico">ℹ</span><span data-i18n="nav.about">About</span></a>
     </nav>
     <div class="foot">
+      <a class="updnote" id="updNote" style="display:none"><span id="updNoteText">Update available</span></a>
       <div class="sidestat"><span class="dot" id="sideDot"></span><span class="txt" id="sideStat">…</span></div>
       <div class="foot-controls">
         <select id="langSel" class="langsel" data-i18n-title="lang.title">
@@ -483,6 +489,7 @@ function show(sec){
   if (sec === 'about') loadUpdate();
 }
 document.getElementById('nav').addEventListener('click', e => { const a=e.target.closest('a'); if(a) show(a.dataset.section); });
+document.getElementById('updNote').onclick = () => show('about');
 
 /* ---------- helpers ---------- */
 function banner(el, kind, msg){ el.className = 'banner show ' + kind; el.textContent = msg; }
@@ -521,6 +528,11 @@ function renderState(s){
   document.getElementById('btnUninstall').disabled = !s.elevated || !s.installed;
   document.getElementById('pillText').textContent = stext;
   document.getElementById('sideStat').textContent = stext;
+  const un = document.getElementById('updNote');
+  if (un) {
+    if (s.updateAvailable) { document.getElementById('updNoteText').textContent = t('upd.available', {v:s.updateAvailable}); un.style.display = ''; }
+    else un.style.display = 'none';
+  }
   setDot(document.getElementById('pillDot'), s.engine, s.installed, s.running);
   setDot(document.getElementById('sideDot'), s.engine, s.installed, s.running);
   document.getElementById('aVer').textContent = s.version;
