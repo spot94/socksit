@@ -33,7 +33,21 @@ type Config struct {
 	// 172.16.0.0/16. Private ranges are already direct via ip_is_private; this
 	// is for arbitrary user-chosen subnets (most useful in greedy mode).
 	DirectSubnets []string `yaml:"direct_subnets"`
-	Mode          string   `yaml:"mode"`
+	// BypassCIDRs are destination ranges kept OUT of the TUN entirely: they are
+	// emitted as the TUN's route-exclusions, so the OS installs more-specific
+	// routes that win over SocksIt's default route (longest-prefix match beats /0
+	// regardless of metric) and the packets leave via the physical gateway.
+	//
+	// This differs from DirectSubnets: those enter the TUN and are then routed to
+	// the direct outbound. That is fine for real destinations, but NOT for a
+	// router-side FakeIP range (e.g. OpenWrt + Podkop/sing-box hands out
+	// 198.18.0.0/15 synthetic addresses) — such a packet only means something to
+	// the router that invented it, so it must never enter our tunnel at all.
+	//
+	// Absent (nil) = the built-in defaults (see DefaultBypassCIDRs); an explicit
+	// empty list disables them.
+	BypassCIDRs []string `yaml:"bypass_cidrs"`
+	Mode        string   `yaml:"mode"`
 	// Coexistence is deprecated: the single capture mode makes it meaningless. It
 	// is still accepted (so old files parse) but cleared on load and never emitted.
 	Coexistence string `yaml:"coexistence,omitempty"`
@@ -155,6 +169,40 @@ type Proxy struct {
 	Interface string `yaml:"interface,omitempty"`
 }
 
+// DefaultFakeIPv4 is SocksIt's own fake-ip range. It lives in 240.0.0.0/4
+// (RFC 1112 Class E, reserved and never routed on the real Internet) precisely
+// so it cannot collide with a router-side FakeIP range: sing-box, mihomo and
+// clash all default to 198.18.0.0/15, and a user whose OpenWrt router does
+// transparent proxying that way would otherwise have both sides claim the same
+// addresses. See LegacyFakeIPv4 for the migration.
+const DefaultFakeIPv4 = "240.0.0.0/15"
+
+// LegacyFakeIPv4 is the fake-ip range SocksIt shipped before the move to Class E.
+// It equals the de-facto router FakeIP range, so a config still carrying this
+// exact value is migrated to DefaultFakeIPv4 on load (it was our built-in
+// default, never a deliberate choice).
+const LegacyFakeIPv4 = "198.18.0.0/15"
+
+// DefaultBypassCIDRs are the ranges excluded from the TUN out of the box.
+//
+//   - 198.18.0.0/15 — RFC 2544 benchmarking range; the de-facto FakeIP range of
+//     sing-box / mihomo / clash. It never appears on the real Internet, so
+//     excluding it is always safe and it makes SocksIt coexist with a router
+//     that proxies transparently via FakeIP.
+//   - 127.0.0.0/8, 169.254.0.0/16 (link-local), 224.0.0.0/4 (multicast) and
+//     255.255.255.255/32 (broadcast) have no business inside the tunnel either.
+//
+// RFC 1918 ranges are not listed here: LAN traffic must still reach the LAN, and
+// it is already kept off the proxy by the ip_is_private route rule plus the
+// default direct_subnets.
+var DefaultBypassCIDRs = []string{
+	"198.18.0.0/15",
+	"127.0.0.0/8",
+	"169.254.0.0/16",
+	"224.0.0.0/4",
+	"255.255.255.255/32",
+}
+
 // DNS carries the fake-ip range for the (IPv4-only) datapath.
 type DNS struct {
 	FakeIPv4 string `yaml:"fakeip_v4"`
@@ -192,10 +240,11 @@ func Default() *Config {
 		// Loopback and private (RFC 1918) ranges bypass the proxy by default —
 		// loopback and LAN traffic should stay direct out of the box.
 		DirectSubnets: []string{"127.0.0.1/32", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"},
+		BypassCIDRs:   append([]string(nil), DefaultBypassCIDRs...),
 		Mode:          ModeAllowlist,
 		KillSwitch:    &on,
 		ShowTray:      &tray,
-		DNS:           DNS{FakeIPv4: "198.18.0.0/15"},
+		DNS:           DNS{FakeIPv4: DefaultFakeIPv4},
 		Control:       Control{ClashAPI: "127.0.0.1:9797"},
 		Log:           Log{Level: "warn"},
 		Update: Update{
@@ -253,6 +302,45 @@ func (c *Config) EffectiveSubnets() []string {
 		return dedupeList(c.DirectSubnets, c.ManagedSubnets)
 	}
 	return c.DirectSubnets
+}
+
+// EffectiveBypassCIDRs is the list of ranges to keep out of the TUN: the
+// configured list, or the built-in defaults when the key is absent. An explicit
+// empty list (bypass_cidrs: []) disables the defaults and returns nothing.
+func (c *Config) EffectiveBypassCIDRs() []string {
+	if c.BypassCIDRs == nil {
+		return append([]string(nil), DefaultBypassCIDRs...)
+	}
+	return trimNonEmpty(c.BypassCIDRs)
+}
+
+// IsBypassed reports whether ip falls in any effective bypass range — the
+// predicate behind "this destination must not enter the tunnel".
+func (c *Config) IsBypassed(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	for _, cidr := range c.EffectiveBypassCIDRs() {
+		_, n, err := net.ParseCIDR(strings.TrimSpace(cidr))
+		if err != nil {
+			continue // validated on load; skip junk defensively
+		}
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// trimNonEmpty trims each entry and drops empties, preserving order.
+func trimNonEmpty(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // DemoteIfUnmanaged normalizes a config that has left managed mode — i.e.
@@ -363,6 +451,17 @@ func (c *Config) applyDefaults() {
 	}
 	if c.DNS.FakeIPv4 == "" {
 		c.DNS.FakeIPv4 = d.DNS.FakeIPv4
+	} else if strings.TrimSpace(c.DNS.FakeIPv4) == LegacyFakeIPv4 {
+		// Migrate the pre-Class-E default away from the router FakeIP range. This
+		// exact value was our built-in default (never a deliberate choice), and
+		// keeping it would collide with routers that proxy transparently via
+		// FakeIP — the very range we now bypass. A custom range is left alone.
+		c.DNS.FakeIPv4 = DefaultFakeIPv4
+	}
+	// bypass_cidrs: absent = built-in defaults; an explicit empty list is honoured
+	// (the user disabled them), so only nil is backfilled.
+	if c.BypassCIDRs == nil {
+		c.BypassCIDRs = append([]string(nil), DefaultBypassCIDRs...)
 	}
 	// IPv4-only datapath: drop the deprecated fake-ip v6 range so it is not
 	// re-emitted (any legacy value is ignored).
@@ -419,8 +518,27 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("managed_subnets: invalid CIDR %q: %w", sn, err)
 		}
 	}
-	if _, _, err := net.ParseCIDR(c.DNS.FakeIPv4); err != nil {
+	for _, sn := range c.BypassCIDRs {
+		if _, _, err := net.ParseCIDR(strings.TrimSpace(sn)); err != nil {
+			return fmt.Errorf("bypass_cidrs: invalid CIDR %q: %w (expected e.g. 198.18.0.0/15)", sn, err)
+		}
+	}
+	fakeIP, fakeNet, err := net.ParseCIDR(c.DNS.FakeIPv4)
+	if err != nil {
 		return fmt.Errorf("dns.fakeip_v4: invalid CIDR %q: %w", c.DNS.FakeIPv4, err)
+	}
+	// Our own fake-ip range must not be bypassed: those addresses only exist
+	// inside our tunnel, so excluding them from the TUN would black-hole every
+	// proxied connection.
+	for _, sn := range c.EffectiveBypassCIDRs() {
+		_, bn, err := net.ParseCIDR(strings.TrimSpace(sn))
+		if err != nil {
+			continue // already reported above
+		}
+		if bn.Contains(fakeIP) || fakeNet.Contains(bn.IP) {
+			return fmt.Errorf("dns.fakeip_v4 %q overlaps bypass_cidrs %q: the fake-ip range must stay inside the tunnel — pick a different range (default %s)",
+				c.DNS.FakeIPv4, sn, DefaultFakeIPv4)
+		}
 	}
 	if host, _, err := net.SplitHostPort(c.Control.ClashAPI); err != nil {
 		return fmt.Errorf("control.clash_api: must be host:port, got %q: %w", c.Control.ClashAPI, err)

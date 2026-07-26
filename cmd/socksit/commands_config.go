@@ -37,6 +37,12 @@ func configCmd() *command {
 				{Name: "rm", Aliases: []string{"remove"}, Summary: "remove a CIDR", Run: cmdConfigSubnetRm},
 				{Name: "list", Aliases: []string{"ls"}, Summary: "list direct subnets", Run: cmdConfigSubnetList},
 			}},
+			{Name: "bypass", Summary: "add/remove/list ranges kept out of the tunnel", Children: []*command{
+				{Name: "add", Summary: "add a bypass CIDR", Run: cmdConfigBypassAdd},
+				{Name: "rm", Aliases: []string{"remove"}, Summary: "remove a bypass CIDR", Run: cmdConfigBypassRm},
+				{Name: "list", Aliases: []string{"ls"}, Summary: "list bypass CIDRs", Run: cmdConfigBypassList},
+				{Name: "reset", Summary: "restore the built-in bypass defaults", Run: cmdConfigBypassReset},
+			}},
 		},
 	}
 }
@@ -342,6 +348,97 @@ func cmdConfigSubnetList(path string, args []string) error {
 		fmt.Println(s)
 	}
 	return nil
+}
+
+// --- bypass add/rm/list/reset (ranges kept out of the TUN entirely) ---
+
+func cmdConfigBypassAdd(path string, args []string) error {
+	fs := newFlagSet(path, "<cidr> [more ...]", "add CIDRs kept out of the tunnel (e.g. a router's FakeIP range)")
+	_ = fs.Parse(args)
+	if fs.NArg() == 0 {
+		fs.Usage()
+		return errSilent
+	}
+	for _, s := range fs.Args() {
+		if _, _, err := net.ParseCIDR(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("invalid CIDR %q: %w (expected e.g. 198.18.0.0/15)", s, err)
+		}
+	}
+	return editConfig(func(c *config.Config) (string, error) {
+		cur := c.EffectiveBypassCIDRs() // materialize the defaults before editing
+		added := 0
+		for _, s := range fs.Args() {
+			s = strings.TrimSpace(s)
+			if containsFold(cur, s) {
+				continue
+			}
+			cur = append(cur, s)
+			added++
+		}
+		if added == 0 {
+			return "", errNoChange
+		}
+		c.BypassCIDRs = cur
+		return fmt.Sprintf("added %d bypass CIDR(s)", added), nil
+	})
+}
+
+func cmdConfigBypassRm(path string, args []string) error {
+	fs := newFlagSet(path, "<cidr> [more ...]", "remove CIDRs from the bypass list")
+	_ = fs.Parse(args)
+	if fs.NArg() == 0 {
+		fs.Usage()
+		return errSilent
+	}
+	return editConfig(func(c *config.Config) (string, error) {
+		cur := c.EffectiveBypassCIDRs()
+		removed := 0
+		for _, s := range fs.Args() {
+			next := removeFold(cur, strings.TrimSpace(s))
+			if len(next) != len(cur) {
+				removed++
+			}
+			cur = next
+		}
+		if removed == 0 {
+			return "", errNoChange
+		}
+		if cur == nil {
+			cur = []string{} // explicit empty: defaults stay disabled
+		}
+		c.BypassCIDRs = cur
+		return fmt.Sprintf("removed %d bypass CIDR(s)", removed), nil
+	})
+}
+
+func cmdConfigBypassList(path string, args []string) error {
+	fs := newFlagSet(path, "[--json]", "list the CIDRs kept out of the tunnel")
+	asJSON := fs.Bool("json", false, "machine-readable output")
+	_ = fs.Parse(args)
+	c, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	list := c.EffectiveBypassCIDRs()
+	if *asJSON {
+		return printJSON(os.Stdout, list)
+	}
+	if len(list) == 0 {
+		fmt.Println("(bypass disabled — everything goes through the tunnel)")
+		return nil
+	}
+	for _, s := range list {
+		fmt.Println(s)
+	}
+	return nil
+}
+
+func cmdConfigBypassReset(path string, args []string) error {
+	_ = newFlagSet(path, "", "restore the built-in bypass defaults").Parse(args)
+	return editConfig(func(c *config.Config) (string, error) {
+		c.BypassCIDRs = append([]string(nil), config.DefaultBypassCIDRs...)
+		return "bypass list reset to defaults", nil
+	})
 }
 
 // --- config load/save plumbing ---

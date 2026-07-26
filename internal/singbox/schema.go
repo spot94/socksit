@@ -50,6 +50,12 @@ type Inbound struct {
 	StrictRoute   bool     `json:"strict_route"`
 	Stack         string   `json:"stack,omitempty"`
 	RouteAddress  []string `json:"route_address,omitempty"`
+	// RouteExcludeAddress keeps these destinations OUT of the tunnel: auto_route
+	// installs more-specific routes for them via the physical gateway, which beat
+	// our default route by longest-prefix match (metric is irrelevant).
+	// Note the modern key: the legacy inet4_/inet6_ address fields were removed in
+	// sing-box 1.12 (using them makes `sing-box check` fail outright).
+	RouteExcludeAddress []string `json:"route_exclude_address,omitempty"`
 }
 
 type Outbound struct {

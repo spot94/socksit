@@ -57,6 +57,11 @@ func Generate(c *config.Config) (*Config, error) {
 			AutoRoute:     true,
 			StrictRoute:   false,    // full capture: DNS is hijacked naturally, no strict_route needed
 			Stack:         "system", // KTD2: system stack (gVisor breaks Windows process matching)
+			// Keep these ranges out of the tunnel entirely (more-specific routes via
+			// the physical gateway). Critical for a router-side FakeIP range: such an
+			// address is meaningful only to the router that minted it, so it must
+			// reach the router, not our TUN. See config.DefaultBypassCIDRs.
+			RouteExcludeAddress: trimAll(c.EffectiveBypassCIDRs()),
 		}},
 		Outbounds: []Outbound{
 			proxyOutbound(c),
@@ -100,6 +105,12 @@ func Generate(c *config.Config) (*Config, error) {
 		{Protocol: "dns", Action: "hijack-dns"},
 		antiLoopRule(c.Proxy.Address),
 		{IPIsPrivate: true, Action: "route", Outbound: tagDirect},
+	}
+	// Bypass ranges are already excluded from the TUN above; this is the safety
+	// net for anything that still reaches the router (e.g. a socket bound before
+	// the exclusions applied) — send it direct, never to the proxy.
+	if bypass := trimAll(c.EffectiveBypassCIDRs()); len(bypass) > 0 {
+		rules = append(rules, RouteRule{IPCIDR: bypass, Action: "route", Outbound: tagDirect})
 	}
 	// User-chosen bypass subnets always go direct (before the per-app rule).
 	if subnets := trimAll(c.EffectiveSubnets()); len(subnets) > 0 {
