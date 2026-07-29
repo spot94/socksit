@@ -54,6 +54,13 @@ type statusView struct {
 // once per version rather than every poll.
 var notifiedVer string
 
+// readyTimeout bounds how long we wait for the notification-area icon to come up
+// before treating this tray as broken. See the watchdog in Run.
+const readyTimeout = 30 * time.Second
+
+// ready is closed once onReady has run (icon + menu registered).
+var ready = make(chan struct{})
+
 // Run shows the tray and blocks until it quits. It is a singleton (a second
 // instance exits immediately) and exits on its own once the service is
 // uninstalled or "Show in tray" is turned off.
@@ -61,6 +68,19 @@ func Run(pipe, version string) {
 	if !acquireSingleton() {
 		return
 	}
+	// Watchdog: if the shell is not ready (typically at boot), the underlying
+	// Shell_NotifyIcon(NIM_ADD) fails and systray logs it, skips onReady and still
+	// pumps messages forever — leaving a blank, unresponsive icon while this
+	// process keeps holding the singleton, so the keeper never replaces it. Exit
+	// instead: that releases the mutex and the service relaunches us shortly, by
+	// which time the shell is up.
+	go func() {
+		select {
+		case <-ready:
+		case <-time.After(readyTimeout):
+			os.Exit(1)
+		}
+	}()
 	systray.Run(func() { onReady(pipe, version) }, func() {})
 }
 
@@ -87,6 +107,7 @@ func acquireSingleton() bool {
 }
 
 func onReady(pipe, version string) {
+	close(ready) // the icon registered — call off the watchdog
 	systray.SetIcon(iconICO)
 	systray.SetTitle("SocksIt")
 	systray.SetTooltip("SocksIt — per-app SOCKS5")

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -71,6 +72,31 @@ func (r *Runtime) trayEnabled() bool {
 	return config.ParseLenient(b).ShowTrayEnabled()
 }
 
+// shellRunning reports whether explorer.exe — the owner of the notification area
+// — is running in the given session. WTSQueryUserToken starts succeeding at the
+// logon screen, well before the shell exists, so this is the signal that the tray
+// actually has somewhere to put its icon.
+func shellRunning(sess uint32) bool {
+	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return true // can't tell — don't block the tray forever
+	}
+	defer windows.CloseHandle(snap)
+
+	var e windows.ProcessEntry32
+	e.Size = uint32(unsafe.Sizeof(e))
+	for err := windows.Process32First(snap, &e); err == nil; err = windows.Process32Next(snap, &e) {
+		if !strings.EqualFold(windows.UTF16ToString(e.ExeFile[:]), "explorer.exe") {
+			continue
+		}
+		var s uint32
+		if windows.ProcessIdToSessionId(e.ProcessID, &s) == nil && s == sess {
+			return true
+		}
+	}
+	return false
+}
+
 // trayRunning reports whether a tray instance currently holds the singleton mutex.
 func trayRunning() bool {
 	name, err := windows.UTF16PtrFromString(TrayMutexName)
@@ -85,13 +111,36 @@ func trayRunning() bool {
 	return true
 }
 
+// shellSettle is how long the shell must have been up before we launch the tray.
+// explorer.exe creates the notification area asynchronously after it starts, and
+// Shell_NotifyIcon(NIM_ADD) legitimately fails with ERROR_TIMEOUT while the shell
+// is still busy booting — the tray would then sit there with a dead, empty icon
+// (systray only retries the add on a later TaskbarCreated broadcast).
+const shellSettle = 5 * time.Second
+
+// shellUpSince remembers when explorer.exe was first seen in the target session,
+// so the settle delay is measured from the shell appearing, not from boot.
+var shellUpSince time.Time
+
 // launchTrayInActiveSession starts "socksit.exe tray" in the interactive console
 // session as the logged-in user (the service itself runs as LocalSystem in
-// session 0 and cannot show UI there).
+// session 0 and cannot show UI there). It refuses to launch until that session's
+// shell is up and settled — a tray started at the logon screen or during early
+// logon gets no working notification-area icon.
 func launchTrayInActiveSession(exe string) error {
 	sess := windows.WTSGetActiveConsoleSessionId()
 	if sess == 0xFFFFFFFF {
 		return errors.New("no active console session")
+	}
+	if !shellRunning(sess) {
+		shellUpSince = time.Time{}
+		return errors.New("shell (explorer.exe) not running yet")
+	}
+	if shellUpSince.IsZero() {
+		shellUpSince = time.Now()
+	}
+	if waited := time.Since(shellUpSince); waited < shellSettle {
+		return fmt.Errorf("shell still starting (%s of %s settled)", waited.Round(time.Second), shellSettle)
 	}
 	var userTok windows.Token
 	if err := windows.WTSQueryUserToken(sess, &userTok); err != nil {
