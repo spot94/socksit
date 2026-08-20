@@ -96,7 +96,18 @@ type RouteRule struct {
 }
 
 type Experimental struct {
-	ClashAPI *ClashAPI `json:"clash_api,omitempty"`
+	ClashAPI  *ClashAPI  `json:"clash_api,omitempty"`
+	CacheFile *CacheFile `json:"cache_file,omitempty"`
+}
+
+// CacheFile persists engine state across restarts. StoreFakeIP is the reason we
+// enable it: without it the fake-ip mapping table lives only in memory, so every
+// engine restart invalidates the addresses apps have already cached — their
+// traffic then goes nowhere until the app itself is restarted.
+type CacheFile struct {
+	Enabled     bool   `json:"enabled"`
+	Path        string `json:"path,omitempty"`
+	StoreFakeIP bool   `json:"store_fakeip,omitempty"`
 }
 
 type ClashAPI struct {

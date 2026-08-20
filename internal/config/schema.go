@@ -81,6 +81,10 @@ type Config struct {
 	// feed's subnets are kept here and unioned with the user's own DirectSubnets
 	// (see EffectiveSubnets). Empty/absent in replace mode.
 	ManagedSubnets []string `yaml:"managed_subnets,omitempty"`
+	// CachePath is where the engine persists its state (notably the fake-ip
+	// table). Runtime-only: set by the service from its data dir, never read from
+	// or written to the YAML.
+	CachePath string `yaml:"-"`
 }
 
 // ConfigSource describes an optional remote config feed. Because a remote config

@@ -55,13 +55,13 @@ type Runtime struct {
 	Actor      string // audit actor (local username)
 	Version    string // app version, reported to the update check
 
-	enabled    atomic.Bool
-	sup        atomic.Pointer[engine.Supervisor]
-	restartCh  chan struct{}
-	log        io.Writer
+	enabled     atomic.Bool
+	sup         atomic.Pointer[engine.Supervisor]
+	restartCh   chan struct{}
+	log         io.Writer
 	lastUpdate  atomic.Pointer[updates.Result]
 	autoApplied atomic.Value // string: last version auto-applied, so auto mode won't re-attempt the same one
-	lastConfig atomic.Pointer[configFetchResult]
+	lastConfig  atomic.Pointer[configFetchResult]
 }
 
 func (r *Runtime) configPath() string { return filepath.Join(r.DataDir, "socksit.yaml") }
@@ -162,6 +162,9 @@ func (r *Runtime) superviseLoop(ctx context.Context) error {
 			continue
 		}
 		r.resolveProxyEgress(cfg) // pin the SOCKS dial to the adapter that reaches the proxy (VPN-safe)
+		// Persist engine state (notably the fake-ip table) next to the config, so a
+		// restart does not strand apps holding an address minted by the previous run.
+		cfg.CachePath = filepath.Join(r.DataDir, "cache.db")
 		js, err := singbox.GenerateJSON(cfg)
 		if err == nil {
 			err = os.WriteFile(r.genPath(), js, 0o600)

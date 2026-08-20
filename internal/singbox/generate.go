@@ -75,6 +75,13 @@ func Generate(c *config.Config) (*Config, error) {
 		Experimental: &Experimental{ClashAPI: &ClashAPI{ExternalController: c.Control.ClashAPI}},
 	}
 
+	// Persist the fake-ip table so a restart does not strand apps that cached an
+	// address from the previous run (see CacheFile). CachePath is set by the
+	// service; an empty path (e.g. `socksit config gen`) simply omits it.
+	if p := strings.TrimSpace(c.CachePath); p != "" {
+		out.Experimental.CacheFile = &CacheFile{Enabled: true, Path: p, StoreFakeIP: true}
+	}
+
 	// Single mode: full-capture (auto_route with no route_address). The default
 	// route enters the TUN, DNS is hijacked, fake-ip is assigned, and the route
 	// rules below decide proxy vs direct per process. (The "polite" fake-ip-CIDR-only
