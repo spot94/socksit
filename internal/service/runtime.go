@@ -165,6 +165,7 @@ func (r *Runtime) superviseLoop(ctx context.Context) error {
 		// Persist engine state (notably the fake-ip table) next to the config, so a
 		// restart does not strand apps holding an address minted by the previous run.
 		cfg.CachePath = filepath.Join(r.DataDir, "cache.db")
+		r.invalidateFakeIPCache(cfg)
 		js, err := singbox.GenerateJSON(cfg)
 		if err == nil {
 			err = os.WriteFile(r.genPath(), js, 0o600)
@@ -269,6 +270,42 @@ func (r *Runtime) effectiveConfig() (*config.Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// invalidateFakeIPCache drops the persisted engine cache when the fake-ip range
+// changes. The cache keeps domain->fake-ip mappings (store_fakeip), and the
+// engine loads it without checking them against the configured range: addresses
+// minted from the previous range would keep being served even though nothing
+// routes them into the TUN any more. That black-holes exactly the apps the range
+// change is meant to fix, and survives restarting them — so clear it instead.
+func (r *Runtime) invalidateFakeIPCache(cfg *config.Config) {
+	prev := r.previousFakeIPRange()
+	now := strings.TrimSpace(cfg.DNS.FakeIPv4)
+	if prev == "" || prev == now {
+		return
+	}
+	if err := os.Remove(cfg.CachePath); err == nil || os.IsNotExist(err) {
+		r.logf("INFO", "fake-ip range changed %s -> %s: cleared the engine cache so stale mappings are not served", prev, now)
+	}
+}
+
+// previousFakeIPRange reports the fake-ip range of the previously generated
+// engine config, or "" when there is none to compare against.
+func (r *Runtime) previousFakeIPRange() string {
+	b, err := os.ReadFile(r.genPath())
+	if err != nil {
+		return ""
+	}
+	var prev singbox.Config
+	if json.Unmarshal(b, &prev) != nil || prev.DNS == nil {
+		return ""
+	}
+	for _, srv := range prev.DNS.Servers {
+		if srv.Type == "fakeip" {
+			return strings.TrimSpace(srv.Inet4Range)
+		}
+	}
+	return ""
 }
 
 // resolveProxyEgress pins proxy.interface (in memory, for this generation only)
