@@ -61,9 +61,9 @@ func Install(currentExe string) error {
 	// Place the engine beside it. Embedded builds self-extract at runtime, so
 	// only non-embedded builds need the engine copied here.
 	if !assets.Embedded() {
-		target := filepath.Join(dir, "sing-box.exe")
+		enginePath := filepath.Join(dir, "sing-box.exe")
 		if src := locateEngine(currentExe); src != "" {
-			if err := copyFile(src, target); err != nil {
+			if err := copyFile(src, enginePath); err != nil {
 				return fmt.Errorf("copy engine: %w", err)
 			}
 		} else {
@@ -75,9 +75,15 @@ func Install(currentExe string) error {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
-			if err := enginedl.Ensure(ctx, client, target); err != nil {
+			if err := enginedl.Ensure(ctx, client, enginePath); err != nil {
 				return fmt.Errorf("sing-box.exe was not found next to %s and could not be downloaded: %w", currentExe, err)
 			}
+		}
+		// Never register the service around an unusable engine: a zero-byte file
+		// fails at launch with "not a valid Win32 application", which is opaque.
+		if fi, err := os.Stat(enginePath); err != nil || fi.Size() == 0 {
+			_ = os.Remove(enginePath)
+			return fmt.Errorf("staged engine at %s is unusable (empty) — remove it and run Set up again", enginePath)
 		}
 	}
 
@@ -94,6 +100,9 @@ func Install(currentExe string) error {
 }
 
 // locateEngine finds sing-box.exe near the given binary (or in assets/bin).
+// locateEngine finds an engine to stage. A zero-byte file is treated as absent:
+// a previously truncated sing-box.exe must not be "copied" over itself again,
+// and falling through to the download path repairs the install.
 func locateEngine(exe string) string {
 	dir := filepath.Dir(exe)
 	for _, c := range []string{
@@ -101,7 +110,7 @@ func locateEngine(exe string) string {
 		filepath.Join(dir, "assets", "bin", "sing-box.exe"),
 		filepath.Join("assets", "bin", "sing-box.exe"),
 	} {
-		if fileExists(c) {
+		if fi, err := os.Stat(c); err == nil && !fi.IsDir() && fi.Size() > 0 {
 			return c
 		}
 	}
@@ -119,21 +128,38 @@ func samePath(a, b string) bool {
 	return strings.EqualFold(filepath.Clean(pa), filepath.Clean(pb))
 }
 
+// copyFile copies src over dst. It refuses to copy a file onto itself — that
+// used to truncate the source to zero bytes (os.Create implies O_TRUNC, so the
+// file was emptied before being read) and is how a re-install produced a 0-byte
+// sing-box.exe. It also stages through a temporary file next to dst and renames
+// it into place, so an interrupted copy leaves the previous file intact instead
+// of a truncated one.
 func copyFile(src, dst string) error {
+	if samePath(src, dst) {
+		return nil // already in place; copying would destroy it
+	}
 	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
-	out, err := os.Create(dst)
+
+	tmp, err := os.CreateTemp(filepath.Dir(dst), ".socksit-copy-*")
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName) // no-op once the rename succeeded
+	if _, err := io.Copy(tmp, in); err != nil {
+		tmp.Close()
 		return err
 	}
-	return out.Close()
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	// Windows will not rename onto an existing file.
+	_ = os.Remove(dst)
+	return os.Rename(tmpName, dst)
 }
 
 // engineDownloadClient builds an HTTP client for the on-demand engine download,
