@@ -35,6 +35,7 @@ type DNSServer struct {
 type DNSRule struct {
 	ProcessName      []string `json:"process_name,omitempty"`
 	ProcessPathRegex []string `json:"process_path_regex,omitempty"`
+	QueryType        []string `json:"query_type,omitempty"`
 	Invert           bool     `json:"invert,omitempty"`
 	Action           string   `json:"action"`
 	Server           string   `json:"server,omitempty"`

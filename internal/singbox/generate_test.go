@@ -105,8 +105,9 @@ func TestAllowlistGreedy(t *testing.T) {
 	if sb.DNS.Final != tagLocal {
 		t.Errorf("allowlist: dns final = %q, want %q", sb.DNS.Final, tagLocal)
 	}
-	if len(sb.DNS.Rules) == 0 || sb.DNS.Rules[0].Server != tagFakeIP {
-		t.Error("allowlist: expected app DNS rule routing to fake-ip")
+	// Search by intent, not by position: AAAA-refusal rules precede these.
+	if !hasDNS(sb.DNS.Rules, func(r DNSRule) bool { return r.Server == tagFakeIP && !r.Invert }) {
+		t.Error("allowlist: expected an app DNS rule routing to fake-ip")
 	}
 	checkWithEngine(t, c)
 }
@@ -140,7 +141,7 @@ func TestBlocklistGreedyWithAuth(t *testing.T) {
 	if sb.DNS.Final != tagLocal {
 		t.Errorf("blocklist: dns final = %q, want %q (fake-ip cannot be the default server)", sb.DNS.Final, tagLocal)
 	}
-	if len(sb.DNS.Rules) == 0 || !sb.DNS.Rules[0].Invert || sb.DNS.Rules[0].Server != tagFakeIP {
+	if !hasDNS(sb.DNS.Rules, func(r DNSRule) bool { return r.Invert && r.Server == tagFakeIP }) {
 		t.Error("blocklist: expected an inverted app DNS rule routing non-listed processes to fake-ip")
 	}
 	checkWithEngine(t, c)
@@ -186,4 +187,14 @@ func TestInvalidConfigRejected(t *testing.T) {
 	if _, err := Generate(c); err == nil {
 		t.Error("expected error for empty proxy address")
 	}
+}
+
+// hasDNS reports whether any DNS rule satisfies pred.
+func hasDNS(rules []DNSRule, pred func(DNSRule) bool) bool {
+	for _, r := range rules {
+		if pred(r) {
+			return true
+		}
+	}
+	return false
 }

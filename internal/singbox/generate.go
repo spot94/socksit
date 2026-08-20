@@ -92,6 +92,15 @@ func Generate(c *config.Config) (*Config, error) {
 	// local. fake-ip cannot be the default/final DNS server, so final is always
 	// local and blocklist selects the proxied set by inverting the app match.
 	out.DNS.Final = tagLocal
+	// The datapath is IPv4-only (the TUN carries no IPv6), so a proxied app that
+	// resolves AAAA reaches its destination over IPv6 OUTSIDE the tunnel: not
+	// proxied, not covered by the kill-switch, and invisible in Statistics — the
+	// app simply looks like it is not handled at all. Deny AAAA to the proxied set
+	// so it falls back to A, gets a fake-ip and enters the tunnel. Must precede the
+	// fake-ip routing rules below.
+	for _, r := range aaaaDenyRules(allow, names, regexes) {
+		out.DNS.Rules = append(out.DNS.Rules, r)
+	}
 	if allow {
 		// The proxied set resolves through fake-ip. Match by name AND by path so a
 		// process whose full path can't be read (sandboxed child) still qualifies.
@@ -143,6 +152,28 @@ func Generate(c *config.Config) (*Config, error) {
 	out.Route.Rules = rules
 
 	return out, nil
+}
+
+// aaaaDenyRules builds the DNS rules that deny AAAA to the proxied process set:
+// the listed apps in allowlist mode, everything except them in blocklist mode.
+func aaaaDenyRules(allow bool, names, regexes []string) []DNSRule {
+	const reject = "reject"
+	aaaa := []string{"AAAA"}
+	var out []DNSRule
+	if allow {
+		if len(names) > 0 {
+			out = append(out, DNSRule{ProcessName: names, QueryType: aaaa, Action: reject})
+		}
+		if len(regexes) > 0 {
+			out = append(out, DNSRule{ProcessPathRegex: regexes, QueryType: aaaa, Action: reject})
+		}
+		return out
+	}
+	// blocklist: the proxied set is everything EXCEPT the listed apps.
+	if len(regexes) > 0 {
+		out = append(out, DNSRule{ProcessPathRegex: regexes, QueryType: aaaa, Invert: true, Action: reject})
+	}
+	return out
 }
 
 // Marshal renders a config to indented JSON bytes.
