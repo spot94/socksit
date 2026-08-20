@@ -173,34 +173,44 @@ type Proxy struct {
 	Interface string `yaml:"interface,omitempty"`
 }
 
-// DefaultFakeIPv4 is SocksIt's own fake-ip range. It lives in 240.0.0.0/4
-// (RFC 1112 Class E, reserved and never routed on the real Internet) precisely
-// so it cannot collide with a router-side FakeIP range: sing-box, mihomo and
-// clash all default to 198.18.0.0/15, and a user whose OpenWrt router does
-// transparent proxying that way would otherwise have both sides claim the same
-// addresses. See LegacyFakeIPv4 for the migration.
-const DefaultFakeIPv4 = "240.0.0.0/15"
-
-// LegacyFakeIPv4 is the fake-ip range SocksIt shipped before the move to Class E.
-// It equals the de-facto router FakeIP range, so a config still carrying this
-// exact value is migrated to DefaultFakeIPv4 on load (it was our built-in
-// default, never a deliberate choice).
-const LegacyFakeIPv4 = "198.18.0.0/15"
-
-// DefaultBypassCIDRs are the ranges excluded from the TUN out of the box.
+// DefaultFakeIPv4 is SocksIt's own fake-ip range: 198.18.0.0/15, the same
+// well-trodden default sing-box, mihomo and clash use. It is deliberately NOT
+// bypassed by default (see DefaultBypassCIDRs) — these addresses only ever mean
+// something inside our own tunnel.
 //
-//   - 198.18.0.0/15 — RFC 2544 benchmarking range; the de-facto FakeIP range of
-//     sing-box / mihomo / clash. It never appears on the real Internet, so
-//     excluding it is always safe and it makes SocksIt coexist with a router
-//     that proxies transparently via FakeIP.
-//   - 127.0.0.0/8, 169.254.0.0/16 (link-local), 224.0.0.0/4 (multicast) and
-//     255.255.255.255/32 (broadcast) have no business inside the tunnel either.
+// Changing this range is inherently breaking: every address an app has already
+// resolved and cached becomes meaningless, so its traffic dies until the app is
+// restarted. Do not move it on users' behalf.
+const DefaultFakeIPv4 = "198.18.0.0/15"
+
+// RouterFakeIPv4 is the range a ROUTER hands out when it proxies transparently
+// via FakeIP (OpenWrt + Podkop/sing-box, mihomo, clash all default to it — the
+// same range we use ourselves, hence the conflict). Such an address is
+// meaningful only to the router that minted it, so on those setups it must be
+// bypassed — and our own fake-ip must then move out of the way. That pair is an
+// opt-in: see AltFakeIPv4 and docs/README "Совместимость с роутерными прокси".
+const RouterFakeIPv4 = "198.18.0.0/15"
+
+// AltFakeIPv4 is the recommended fake-ip range when 198.18.0.0/15 is taken by a
+// FakeIP router: 240.0.0.0/4 (RFC 1112 Class E) is reserved and never routed on
+// the real Internet. Some Windows builds have historically treated Class E as
+// martian, so it is offered as the documented alternative rather than imposed as
+// a default.
+const AltFakeIPv4 = "240.0.0.0/15"
+
+// DefaultBypassCIDRs are the ranges excluded from the TUN out of the box. Only
+// addresses that can never be a real proxied destination are listed:
+// loopback, link-local, multicast and broadcast.
+//
+// RouterFakeIPv4 is intentionally absent. Bypassing it is right only when a
+// FakeIP router is in play, and it forces our own fake-ip range to move — a
+// breaking change for every app holding a cached address. Users on such a router
+// opt in explicitly (bypass_cidrs + dns.fakeip_v4), which Validate guides.
 //
 // RFC 1918 ranges are not listed here: LAN traffic must still reach the LAN, and
 // it is already kept off the proxy by the ip_is_private route rule plus the
 // default direct_subnets.
 var DefaultBypassCIDRs = []string{
-	"198.18.0.0/15",
 	"127.0.0.0/8",
 	"169.254.0.0/16",
 	"224.0.0.0/4",
@@ -347,6 +357,16 @@ func trimNonEmpty(in []string) []string {
 	return out
 }
 
+// bypasses reports whether cidr is in the effective bypass list (exact match).
+func (c *Config) bypasses(cidr string) bool {
+	for _, s := range c.EffectiveBypassCIDRs() {
+		if strings.TrimSpace(s) == cidr {
+			return true
+		}
+	}
+	return false
+}
+
 // DemoteIfUnmanaged normalizes a config that has left managed mode — i.e.
 // config_source.url is empty but channel state lingers. It drops the
 // feed-contributed managed_apps/managed_subnets (Drop policy: only the user's
@@ -453,19 +473,20 @@ func (c *Config) applyDefaults() {
 	if c.Proxy.Port == 0 {
 		c.Proxy.Port = d.Proxy.Port
 	}
-	if c.DNS.FakeIPv4 == "" {
-		c.DNS.FakeIPv4 = d.DNS.FakeIPv4
-	} else if strings.TrimSpace(c.DNS.FakeIPv4) == LegacyFakeIPv4 {
-		// Migrate the pre-Class-E default away from the router FakeIP range. This
-		// exact value was our built-in default (never a deliberate choice), and
-		// keeping it would collide with routers that proxy transparently via
-		// FakeIP — the very range we now bypass. A custom range is left alone.
-		c.DNS.FakeIPv4 = DefaultFakeIPv4
-	}
 	// bypass_cidrs: absent = built-in defaults; an explicit empty list is honoured
 	// (the user disabled them), so only nil is backfilled.
 	if c.BypassCIDRs == nil {
 		c.BypassCIDRs = append([]string(nil), DefaultBypassCIDRs...)
+	}
+	if c.DNS.FakeIPv4 == "" {
+		c.DNS.FakeIPv4 = d.DNS.FakeIPv4
+	} else if strings.TrimSpace(c.DNS.FakeIPv4) == AltFakeIPv4 && !c.bypasses(RouterFakeIPv4) {
+		// One short-lived release moved everyone to Class E and bypassed
+		// 198.18.0.0/15 by default. That stranded every address apps had already
+		// cached and put the fleet on an unverified range, so bring configs that
+		// still carry that value back — unless this install genuinely needs it,
+		// i.e. it bypasses the router FakeIP range on purpose.
+		c.DNS.FakeIPv4 = DefaultFakeIPv4
 	}
 	// IPv4-only datapath: drop the deprecated fake-ip v6 range so it is not
 	// re-emitted (any legacy value is ignored).
@@ -540,8 +561,8 @@ func (c *Config) Validate() error {
 			continue // already reported above
 		}
 		if bn.Contains(fakeIP) || fakeNet.Contains(bn.IP) {
-			return fmt.Errorf("dns.fakeip_v4 %q overlaps bypass_cidrs %q: the fake-ip range must stay inside the tunnel — pick a different range (default %s)",
-				c.DNS.FakeIPv4, sn, DefaultFakeIPv4)
+			return fmt.Errorf("dns.fakeip_v4 %q overlaps bypass_cidrs %q: the fake-ip range must stay inside the tunnel — set dns.fakeip_v4 to a range you do not bypass (recommended on a FakeIP router: %s)",
+				c.DNS.FakeIPv4, sn, AltFakeIPv4)
 		}
 	}
 	if host, _, err := net.SplitHostPort(c.Control.ClashAPI); err != nil {

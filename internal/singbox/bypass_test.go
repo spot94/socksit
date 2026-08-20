@@ -21,8 +21,8 @@ func TestBypassRouteExclusions(t *testing.T) {
 	}
 
 	excl := sb.Inbounds[0].RouteExcludeAddress
-	if !contains(excl, "198.18.0.0/15") {
-		t.Errorf("the router FakeIP range must be excluded from the TUN, got %v", excl)
+	if contains(excl, config.RouterFakeIPv4) {
+		t.Errorf("the router FakeIP range is our own fake-ip by default — it must NOT be excluded, got %v", excl)
 	}
 	for _, want := range config.DefaultBypassCIDRs {
 		if !contains(excl, want) {
@@ -36,7 +36,7 @@ func TestBypassRouteExclusions(t *testing.T) {
 	// Safety-net rule: bypass CIDRs routed to direct, never to the proxy.
 	found := false
 	for _, r := range sb.Route.Rules {
-		if r.Outbound == tagDirect && contains(r.IPCIDR, "198.18.0.0/15") {
+		if r.Outbound == tagDirect && contains(r.IPCIDR, "127.0.0.0/8") {
 			found = true
 		}
 	}
@@ -57,9 +57,22 @@ func TestBypassRouteExclusions(t *testing.T) {
 	if err := json.Unmarshal(js, &probe); err != nil {
 		t.Fatal(err)
 	}
-	if len(probe.Inbounds) == 0 || !contains(probe.Inbounds[0].Exclude, "198.18.0.0/15") {
+	if len(probe.Inbounds) == 0 || !contains(probe.Inbounds[0].Exclude, "127.0.0.0/8") {
 		t.Errorf("route_exclude_address missing in the generated JSON:\n%s", js)
 	}
+
+	// Opt-in (FakeIP router): the router range is excluded only once asked for,
+	// together with moving our own fake-ip out of the way.
+	c.BypassCIDRs = append([]string{config.RouterFakeIPv4}, config.DefaultBypassCIDRs...)
+	c.DNS.FakeIPv4 = config.AltFakeIPv4
+	sbRouter, err := Generate(c)
+	if err != nil {
+		t.Fatalf("router opt-in generate: %v", err)
+	}
+	if !contains(sbRouter.Inbounds[0].RouteExcludeAddress, config.RouterFakeIPv4) {
+		t.Errorf("opt-in must exclude %s, got %v", config.RouterFakeIPv4, sbRouter.Inbounds[0].RouteExcludeAddress)
+	}
+	checkWithEngine(t, c)
 }
 
 // TestBypassDisabled: an explicit empty list emits no exclusions (opt-out).
