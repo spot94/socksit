@@ -113,6 +113,13 @@ func cmdConfigValidate(path string, args []string) error {
 	if err != nil {
 		return err
 	}
+	// Unknown keys are accepted (a newer SocksIt may have written them), but a
+	// typo looks the same — surface them here where the user asked for a check.
+	if b, rerr := os.ReadFile(*in); rerr == nil {
+		if unknown := config.UnknownKeys(b); len(unknown) > 0 {
+			fmt.Printf("warning: unrecognised key(s): %s — a typo, or written by a newer SocksIt (ignored)\n", strings.Join(unknown, ", "))
+		}
+	}
 	js, err := singbox.GenerateJSON(c)
 	if err != nil {
 		return err

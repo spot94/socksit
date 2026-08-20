@@ -26,10 +26,17 @@ mode: allowlist
 	}
 }
 
-func TestParseRejectsUnknownKey(t *testing.T) {
+// Parse used to reject unknown keys to catch typos. That made configs
+// forward-incompatible: once a newer SocksIt wrote a key an older build did not
+// know (bypass_cidrs in the field), the older build refused the whole config and
+// proxying stopped. Unknown keys are now accepted and merely reported.
+func TestParseAcceptsUnknownKeyButReportsIt(t *testing.T) {
 	y := "proxy:\n  address: 1.2.3.4\n  port: 1\nmode: allowlist\ntypo_field: true\n"
-	if _, err := Parse([]byte(y)); err == nil {
-		t.Error("expected unknown-field rejection")
+	if _, err := Parse([]byte(y)); err != nil {
+		t.Errorf("unknown keys must not break parsing, got %v", err)
+	}
+	if got := UnknownKeys([]byte(y)); len(got) != 1 || got[0] != "typo_field" {
+		t.Errorf("UnknownKeys = %v, want [typo_field]", got)
 	}
 }
 

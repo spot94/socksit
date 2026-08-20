@@ -878,6 +878,13 @@ func (a *app) buildDiagnostics() string {
 	if _, e := config.Load(a.configPath); e != nil {
 		line("[x] "+a.tr("Config is not valid yet", "Конфиг ещё не валиден")+": %v", e)
 	}
+	if b, rerr := os.ReadFile(a.configPath); rerr == nil {
+		if unknown := config.UnknownKeys(b); len(unknown) > 0 {
+			line("[?] "+a.tr("Unrecognised config key(s): %s — a typo, or written by a newer SocksIt (ignored).",
+				"Нераспознанные ключи конфига: %s — опечатка либо запись от более новой версии SocksIt (игнорируются)."),
+				strings.Join(unknown, ", "))
+		}
+	}
 	addr := strings.TrimSpace(c.Proxy.Address)
 	if addr == "" {
 		line("[x] " + a.tr("No proxy address set — open Settings and set the SOCKS5 address.", "Адрес прокси не задан — откройте «Настройки» и укажите адрес SOCKS5."))
