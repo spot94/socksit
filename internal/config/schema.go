@@ -210,6 +210,18 @@ const AltFakeIPv4 = "240.0.0.0/15"
 // RFC 1918 ranges are not listed here: LAN traffic must still reach the LAN, and
 // it is already kept off the proxy by the ip_is_private route rule plus the
 // default direct_subnets.
+// legacyDefaultBypassCIDRs is the bypass list 0.2.6/0.2.7 shipped as their
+// default. Those releases persisted it into socksit.yaml verbatim, so a config
+// carrying exactly this set (together with the Class E fake-ip they also forced)
+// is machine-written, not a deliberate FakeIP-router setup — see applyDefaults.
+var legacyDefaultBypassCIDRs = []string{
+	RouterFakeIPv4,
+	"127.0.0.0/8",
+	"169.254.0.0/16",
+	"224.0.0.0/4",
+	"255.255.255.255/32",
+}
+
 var DefaultBypassCIDRs = []string{
 	"127.0.0.0/8",
 	"169.254.0.0/16",
@@ -357,6 +369,30 @@ func trimNonEmpty(in []string) []string {
 	return out
 }
 
+// sameCIDRSet reports whether two CIDR lists hold the same entries, ignoring
+// order, surrounding space and duplicates.
+func sameCIDRSet(a, b []string) bool {
+	norm := func(in []string) map[string]bool {
+		m := make(map[string]bool, len(in))
+		for _, s := range in {
+			if s = strings.TrimSpace(s); s != "" {
+				m[s] = true
+			}
+		}
+		return m
+	}
+	ma, mb := norm(a), norm(b)
+	if len(ma) != len(mb) {
+		return false
+	}
+	for k := range ma {
+		if !mb[k] {
+			return false
+		}
+	}
+	return true
+}
+
 // bypasses reports whether cidr is in the effective bypass list (exact match).
 func (c *Config) bypasses(cidr string) bool {
 	for _, s := range c.EffectiveBypassCIDRs() {
@@ -480,13 +516,26 @@ func (c *Config) applyDefaults() {
 	}
 	if c.DNS.FakeIPv4 == "" {
 		c.DNS.FakeIPv4 = d.DNS.FakeIPv4
-	} else if strings.TrimSpace(c.DNS.FakeIPv4) == AltFakeIPv4 && !c.bypasses(RouterFakeIPv4) {
-		// One short-lived release moved everyone to Class E and bypassed
-		// 198.18.0.0/15 by default. That stranded every address apps had already
-		// cached and put the fleet on an unverified range, so bring configs that
-		// still carry that value back — unless this install genuinely needs it,
-		// i.e. it bypasses the router FakeIP range on purpose.
-		c.DNS.FakeIPv4 = DefaultFakeIPv4
+	} else if strings.TrimSpace(c.DNS.FakeIPv4) == AltFakeIPv4 {
+		// 0.2.6/0.2.7 moved everyone to Class E and bypassed 198.18.0.0/15 by
+		// default, stranding every address apps had already cached and putting the
+		// fleet on an unverified range. Undo it — but only where the values are
+		// clearly the ones those releases wrote, never a deliberate setup:
+		//
+		//   - bypass list untouched by the user (exactly their default set): it was
+		//     persisted into socksit.yaml, so it looks identical to an opt-in and
+		//     cannot be told apart by the presence of 198.18.0.0/15 alone. Drop the
+		//     router range from it and restore our fake-ip.
+		//   - router range not bypassed at all: nothing to undo but the range.
+		//
+		// Anything else (a hand-edited bypass list) is left alone.
+		switch {
+		case sameCIDRSet(c.BypassCIDRs, legacyDefaultBypassCIDRs):
+			c.BypassCIDRs = append([]string(nil), DefaultBypassCIDRs...)
+			c.DNS.FakeIPv4 = DefaultFakeIPv4
+		case !c.bypasses(RouterFakeIPv4):
+			c.DNS.FakeIPv4 = DefaultFakeIPv4
+		}
 	}
 	// IPv4-only datapath: drop the deprecated fake-ip v6 range so it is not
 	// re-emitted (any legacy value is ignored).
