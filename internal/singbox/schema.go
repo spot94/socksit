@@ -74,7 +74,12 @@ type Outbound struct {
 }
 
 type Route struct {
-	AutoDetectInterface   bool            `json:"auto_detect_interface"`
+	AutoDetectInterface bool `json:"auto_detect_interface"`
+	// FindProcess makes the engine resolve the owning process for every
+	// connection, not only when a rule forces the lookup. Without it a connection
+	// matched by an earlier rule (private IP, a bypass range) carries no process
+	// info, so it shows up in Statistics with an empty app column.
+	FindProcess           bool            `json:"find_process,omitempty"`
 	DefaultDomainResolver *DomainResolver `json:"default_domain_resolver,omitempty"`
 	Rules                 []RouteRule     `json:"rules"`
 	Final                 string          `json:"final"`

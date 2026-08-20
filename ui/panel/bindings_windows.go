@@ -989,9 +989,16 @@ func (a *app) fetchStats() (rows []statRow, totals string, err error) {
 	}
 	for i := range c.Connections {
 		cn := &c.Connections[i]
+		// sing-box reports only processPath (there is no "process" field), so the
+		// basename is the app name. When the engine could not attribute the
+		// connection at all, say so rather than leaving the column blank — an empty
+		// cell reads as "my app is missing from the list".
 		p := cn.Metadata.Process
 		if p == "" && cn.Metadata.ProcessPath != "" {
 			p = filepath.Base(cn.Metadata.ProcessPath)
+		}
+		if p == "" {
+			p = a.tr("(unknown)", "(неизвестно)")
 		}
 		dst := cn.Metadata.Host
 		if dst == "" {

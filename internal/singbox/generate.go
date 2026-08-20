@@ -69,6 +69,7 @@ func Generate(c *config.Config) (*Config, error) {
 		},
 		Route: &Route{
 			AutoDetectInterface:   true,
+			FindProcess:           true,                              // populate process info for every connection (Statistics)
 			DefaultDomainResolver: &DomainResolver{Server: tagLocal}, // required since 1.12
 			Final:                 tagDirect,
 		},
