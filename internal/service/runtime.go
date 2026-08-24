@@ -61,6 +61,7 @@ type Runtime struct {
 	log        io.Writer
 	lastUpdate atomic.Pointer[updates.Result]
 	lastConfig atomic.Pointer[configFetchResult]
+	vpnHosts   atomic.Value // string: VPN gateway names last exempted, so the log fires only on change
 }
 
 func (r *Runtime) configPath() string { return filepath.Join(r.DataDir, "socksit.yaml") }
@@ -222,6 +223,7 @@ func (r *Runtime) superviseLoop(ctx context.Context) error {
 		// Persist engine state (notably the fake-ip table) next to the config, so a
 		// restart does not strand apps holding an address minted by the previous run.
 		cfg.CachePath = filepath.Join(r.DataDir, "cache.db")
+		r.applyVPNGatewayExemptions(cfg)
 		r.invalidateFakeIPCache(cfg)
 		js, err := singbox.GenerateJSON(cfg)
 		if err == nil {
@@ -514,6 +516,12 @@ func (r *Runtime) Status() (any, error) {
 		m["apps"] = len(c.Apps)
 		m["mode"] = c.Mode
 		m["kill_switch"] = c.KillSwitchOn()
+		// Names kept off fake-ip because another VPN client on this machine needs
+		// them (see applyVPNGatewayExemptions). Reported so the exemption is
+		// visible in diagnostics instead of being invisible magic.
+		if v, _ := r.vpnHosts.Load().(string); v != "" {
+			m["vpn_gateways_direct"] = v
+		}
 		// Surface an available update so the tray can notify. Only in notify mode:
 		// auto installs it itself, so there is nothing for the user to act on.
 		if res := r.lastUpdate.Load(); res != nil && res.HasUpdate && strings.EqualFold(c.Update.Mode, config.UpdateNotify) {

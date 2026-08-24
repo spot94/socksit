@@ -79,6 +79,9 @@ func cmdDoctor(path string, args []string) error {
 		boolWord(rep["ipc_reachable"] == true, "reachable", "unreachable"))
 	if t, ok := rep["tunnel"].(map[string]any); ok {
 		fmt.Printf("  tunnel state   %v (proxy %v, %v apps, %v mode)\n", t["state"], t["proxy"], t["apps"], t["mode"])
+		if v, ok := t["vpn_gateways_direct"].(string); ok && v != "" {
+			fmt.Printf("  vpn gateways   kept off fake-ip so their client can reach them: %s\n", v)
+		}
 	}
 	return nil
 }

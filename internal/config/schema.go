@@ -33,6 +33,11 @@ type Config struct {
 	// 172.16.0.0/16. Private ranges are already direct via ip_is_private; this
 	// is for arbitrary user-chosen subnets (most useful in greedy mode).
 	DirectSubnets []string `yaml:"direct_subnets"`
+	// ExtraDirectDomains is filled in by the service, not by the file: names it
+	// detected must stay off fake-ip (VPN gateways — see vpnGatewayHosts). Kept
+	// apart from DirectDomains so it is never written back to socksit.yaml and
+	// never survives the machine it was detected on.
+	ExtraDirectDomains []string `yaml:"-"`
 	// DirectDomains are names that must never go through the proxy — the
 	// name-space counterpart of DirectSubnets. Each entry does two things: the
 	// name is exempt from fake-ip (so the app connects to its real address) and
@@ -576,10 +581,13 @@ func (c *Config) EffectiveDirectDomains() []string {
 	if own == nil {
 		own = DefaultDirectDomains
 	}
+	list := trimNonEmpty(own)
 	if c.ConfigManaged() && c.MergeMode() == MergeOverride {
-		return dedupeList(trimNonEmpty(own), c.ManagedDomains)
+		list = dedupeList(list, c.ManagedDomains)
 	}
-	return trimNonEmpty(own)
+	// Detected names are added even when the configured list is explicitly empty:
+	// they are not a preference but a guard against breaking another tunnel.
+	return dedupeList(list, c.ExtraDirectDomains)
 }
 
 // ProxyAllOn reports whether every application is proxied, ignoring the app
