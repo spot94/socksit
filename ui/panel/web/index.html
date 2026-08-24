@@ -150,6 +150,10 @@
     margin:12px -24px 0;padding:12px 24px;background:var(--bg);border-top:1px solid var(--border);
     /* also paint over the scroll container's bottom padding, or rows show under the bar */
     box-shadow:0 20px 0 var(--bg)}
+  /* Results belong next to the control that produced them: the settings section
+     is several screens tall, so a banner appended at its end was invisible unless
+     you thought to scroll for it. */
+  .actionbar .banner{margin:0;flex:1;min-width:0;padding:8px 12px}
   .banner{border-radius:9px;padding:10px 13px;font-size:13px;margin-top:12px;display:none;white-space:pre-line}
   .banner.show{display:block}
   .banner.ok{background:#1a9c5318;color:var(--ok);border:1px solid #1a9c5340}
@@ -284,6 +288,7 @@
           <label class="fld creds"><span data-i18n="lbl.password">Password</span> <span class="muted" data-i18n="note.passBlank">(blank = keep)</span><input type="password" id="fPass" data-i18n-ph="ph.keep"></label>
         </div>
         <div class="row" style="margin-top:10px"><div class="spacer"></div><button id="btnTest2" data-i18n="btn.test">Test proxy</button></div>
+        <div class="banner" id="testBanner"></div>
       </div>
 
       <div class="card" style="margin-top:10px">
@@ -370,8 +375,8 @@
 
       <div class="actionbar">
         <button class="primary" id="btnSave" data-i18n="btn.save">Save &amp; apply</button>
+        <div class="banner" id="setBanner"></div>
       </div>
-      <div class="banner" id="setBanner"></div>
     </section>
 
     <!-- STATISTICS -->
@@ -686,7 +691,7 @@ document.getElementById('btnSetup').onclick = e=>svc('setup', e.target);
 document.getElementById('btnStart').onclick = e=>svc('start', e.target);
 document.getElementById('btnStop').onclick = e=>svc('stop', e.target);
 document.getElementById('btnUninstall').onclick = e=>svc('uninstall', e.target);
-document.getElementById('btnTest').onclick = ()=>testProxy(document.getElementById('dashBanner'));
+document.getElementById('btnTest').onclick = e=>testProxy(document.getElementById('dashBanner'), false, e.currentTarget);
 
 /* ---------- settings ---------- */
 function setLock(inputId, labelId, badgeId, on){
@@ -919,18 +924,21 @@ function collect(){
     directSubnets:subnets.slice(), directDomains:domains.slice(), apps:apps.slice(),
     cfgUrl:document.getElementById('cfgUrl').value.trim(), cfgInterval:document.getElementById('cfgInterval').value.trim()||'1h', cfgMerge:document.getElementById('cfgMerge').value, cfgProxy:document.getElementById('cfgProxy').value.trim(), cfgSigned:document.getElementById('cfgSigned').checked, cfgPubKey:document.getElementById('cfgPubKey').value.trim() };
 }
-document.getElementById('btnSave').onclick = async ()=>{ const b=document.getElementById('setBanner'); addSubnet(); addDomain(); banner(b,'info',t('msg.saving'));
+document.getElementById('btnSave').onclick = async ()=>{ const b=document.getElementById('setBanner'); addSubnet(); addDomain(); g('testBanner').className='banner'; banner(b,'info',t('msg.saving'));
   const r = await call('appSaveConfig', collect()); banner(b, r.ok?'ok':'err', r.message); refreshState(); };
-document.getElementById('btnTest2').onclick = ()=>testProxy(document.getElementById('setBanner'), true);
+document.getElementById('btnTest2').onclick = e=>testProxy(g('testBanner'), true, e.currentTarget);
 
-async function testProxy(bannerEl, fromSettings){
+async function testProxy(bannerEl, fromSettings, btn){
   banner(bannerEl,'info',t('msg.testing'));
-  let addr, port, user, pass;
-  if(fromSettings){ const c=collect(); addr=c.address; port=c.port; user=c.username; pass=c.password; }
-  else { const c=await call('appGetConfig'); addr=c.address; port=c.port; user=''; pass=''; }
-  if(!addr){ banner(bannerEl,'err',t('msg.setAddrFirst')); return; }
-  const r = await job('startTestProxy', addr, port, user, pass);
-  banner(bannerEl, r.ok?'ok':'err', r.message);
+  if(btn) btn.disabled = true; // the probe takes seconds; a second click would race it
+  try{
+    let addr, port, user, pass;
+    if(fromSettings){ const c=collect(); addr=c.address; port=c.port; user=c.username; pass=c.password; }
+    else { const c=await call('appGetConfig'); addr=c.address; port=c.port; user=''; pass=''; }
+    if(!addr){ banner(bannerEl,'err',t('msg.setAddrFirst')); return; }
+    const r = await job('startTestProxy', addr, port, user, pass);
+    banner(bannerEl, r.ok?'ok':'err', r.message);
+  } finally { if(btn) btn.disabled = false; }
 }
 
 /* ---------- statistics ---------- */
