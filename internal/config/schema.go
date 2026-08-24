@@ -234,9 +234,29 @@ var DefaultBypassCIDRs = []string{
 	"255.255.255.255/32",
 }
 
+// DefaultDirectDomains are name suffixes that must resolve for real instead of
+// getting a fake-ip: mDNS and intranet names, whose real address decides how
+// they are routed (LAN stays LAN). Add your corporate suffix here if internal
+// hosts are reached by name and must not go through the proxy.
+var DefaultDirectDomains = []string{".local", ".lan", ".internal", ".home.arpa"}
+
 // DNS carries the fake-ip range for the (IPv4-only) datapath.
 type DNS struct {
 	FakeIPv4 string `yaml:"fakeip_v4"`
+	// FakeIPAll (default true) hands a fake-ip to EVERY name lookup instead of
+	// only the proxied apps' ones. Selecting by process at DNS time does not work
+	// on Windows: the query is sent by the DNS Client service, not by the
+	// application, so a process rule never matches and proxied apps ended up
+	// resolving through the local resolver — a leak that also picked CDN nodes
+	// near the user instead of near the proxy, and returned split-horizon
+	// addresses unreachable from it. With a fake-ip the name travels to the proxy
+	// and is resolved at its egress; routing still decides proxy vs direct per
+	// process, and direct traffic is re-resolved locally by the direct outbound.
+	//
+	// Turning it off restores the old per-process DNS rules.
+	FakeIPAll *bool `yaml:"fakeip_all"`
+	// DirectDomains are suffixes exempt from fake-ip (see DefaultDirectDomains).
+	DirectDomains []string `yaml:"direct_domains"`
 	// FakeIPv6 is deprecated: the datapath is IPv4-only (the TUN has no v6
 	// address, so v6 stays native). Still accepted so old files parse, but it is
 	// cleared on load and never used or re-emitted.
@@ -275,7 +295,7 @@ func Default() *Config {
 		Mode:          ModeAllowlist,
 		KillSwitch:    &on,
 		ShowTray:      &tray,
-		DNS:           DNS{FakeIPv4: DefaultFakeIPv4},
+		DNS:           DNS{FakeIPv4: DefaultFakeIPv4, DirectDomains: append([]string(nil), DefaultDirectDomains...)},
 		Control:       Control{ClashAPI: "127.0.0.1:9797"},
 		Log:           Log{Level: "warn"},
 		Update: Update{
@@ -498,6 +518,18 @@ func (c *Config) LogLevel() string {
 // written before this option keep showing the tray).
 func (c *Config) ShowTrayEnabled() bool { return c.ShowTray == nil || *c.ShowTray }
 
+// FakeIPForAll reports whether every lookup gets a fake-ip (default true).
+func (c *Config) FakeIPForAll() bool { return c.DNS.FakeIPAll == nil || *c.DNS.FakeIPAll }
+
+// EffectiveDirectDomains is the configured fake-ip exemption list, or the
+// built-in defaults when the key is absent. An explicit empty list exempts none.
+func (c *Config) EffectiveDirectDomains() []string {
+	if c.DNS.DirectDomains == nil {
+		return append([]string(nil), DefaultDirectDomains...)
+	}
+	return trimNonEmpty(c.DNS.DirectDomains)
+}
+
 // ProxyAllOn reports whether every application is proxied, ignoring the app
 // list (default false).
 func (c *Config) ProxyAllOn() bool { return c.ProxyAll != nil && *c.ProxyAll }
@@ -517,6 +549,9 @@ func (c *Config) applyDefaults() {
 	c.Coexistence = ""
 	if c.Proxy.Port == 0 {
 		c.Proxy.Port = d.Proxy.Port
+	}
+	if c.DNS.DirectDomains == nil {
+		c.DNS.DirectDomains = append([]string(nil), DefaultDirectDomains...)
 	}
 	// bypass_cidrs: absent = built-in defaults; an explicit empty list is honoured
 	// (the user disabled them), so only nil is backfilled.

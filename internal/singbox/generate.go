@@ -93,25 +93,43 @@ func Generate(c *config.Config) (*Config, error) {
 	// local. fake-ip cannot be the default/final DNS server, so final is always
 	// local and blocklist selects the proxied set by inverting the app match.
 	out.DNS.Final = tagLocal
-	// The datapath is IPv4-only (the TUN carries no IPv6), so a proxied app that
-	// resolves AAAA reaches its destination over IPv6 OUTSIDE the tunnel: not
-	// proxied, not covered by the kill-switch, and invisible in Statistics — the
-	// app simply looks like it is not handled at all. Deny AAAA to the proxied set
-	// so it falls back to A, gets a fake-ip and enters the tunnel. Must precede the
-	// fake-ip routing rules below.
-	if proxyAll {
-		// Everything is proxied, so nothing may resolve AAAA (v4-only datapath).
+	fakeAll := c.FakeIPForAll()
+
+	// 1. Names that must resolve for real: mDNS/intranet suffixes (their true
+	// address decides routing, so a fake-ip would send LAN traffic the wrong way)
+	// and the proxy's own hostname (never dial the proxy through a fake address).
+	if dd := trimAll(c.EffectiveDirectDomains()); len(dd) > 0 {
+		out.DNS.Rules = append(out.DNS.Rules, DNSRule{DomainSuffix: dd, Action: "route", Server: tagLocal})
+	}
+	if addr := strings.TrimSpace(c.Proxy.Address); addr != "" && net.ParseIP(addr) == nil {
+		out.DNS.Rules = append(out.DNS.Rules, DNSRule{Domain: []string{addr}, Action: "route", Server: tagLocal})
+	}
+
+	// 2. The datapath carries no IPv6, so an AAAA answer lets traffic leave outside
+	// the tunnel: unproxied, uncovered by the kill-switch and invisible in
+	// Statistics. Refuse it. Per-process refusal only works when the query can be
+	// attributed to the app, which on Windows it cannot (the DNS Client service
+	// sends it) — so with global fake-ip the refusal is global too.
+	switch {
+	case proxyAll || fakeAll:
 		out.DNS.Rules = append(out.DNS.Rules, DNSRule{QueryType: []string{"AAAA"}, Action: "reject"})
-	} else {
+	default:
 		for _, r := range aaaaDenyRules(allow, names, regexes) {
 			out.DNS.Rules = append(out.DNS.Rules, r)
 		}
 	}
-	if proxyAll {
+
+	// 3. Hand out fake-ip. Globally by default: the query cannot be attributed to
+	// the requesting application on Windows, so a per-process rule silently never
+	// matched and every proxied app resolved through the local resolver. A fake-ip
+	// keeps the NAME in the connection, so the proxy resolves it at its own egress;
+	// traffic that routing sends direct is re-resolved locally by the direct
+	// outbound, so non-proxied apps behave as before.
+	if fakeAll {
+		out.DNS.Rules = append(out.DNS.Rules, DNSRule{QueryType: []string{"A"}, Action: "route", Server: tagFakeIP})
+	} else if proxyAll {
 		// No per-app DNS routing: the app list is ignored in this mode.
 	} else if allow {
-		// The proxied set resolves through fake-ip. Match by name AND by path so a
-		// process whose full path can't be read (sandboxed child) still qualifies.
 		if len(names) > 0 {
 			out.DNS.Rules = append(out.DNS.Rules, DNSRule{ProcessName: names, Action: "route", Server: tagFakeIP})
 		}

@@ -40,8 +40,10 @@ func TestProxiedAppsCannotEscapeOverIPv6(t *testing.T) {
 	}
 	checkWithEngine(t, c)
 
-	// blocklist: the proxied set is everything EXCEPT the listed apps, so the
-	// refusal must be inverted rather than dropped.
+	// With the legacy per-process DNS rules (fakeip_all off) the refusal is scoped
+	// to the proxied set, so in blocklist mode it must be inverted rather than dropped.
+	off := false
+	c.DNS.FakeIPAll = &off
 	c.Mode = config.ModeBlocklist
 	sb, err = Generate(c)
 	if err != nil {
@@ -58,7 +60,9 @@ func TestProxiedAppsCannotEscapeOverIPv6(t *testing.T) {
 	}
 	checkWithEngine(t, c)
 
-	// No apps configured: nothing is proxied, so nothing should be refused.
+	// No apps configured AND per-process rules: nothing is proxied, so nothing is
+	// refused. (With global fake-ip the refusal is unconditional by design — the
+	// query cannot be attributed to an app, see TestFakeIPForAllLookups.)
 	c.Mode = config.ModeAllowlist
 	c.Apps = nil
 	sb, err = Generate(c)

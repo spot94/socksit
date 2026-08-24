@@ -117,6 +117,10 @@ func TestBlocklistGreedyWithAuth(t *testing.T) {
 	c.Mode = config.ModeBlocklist
 	c.Apps = []string{"foo.exe"}
 	c.Proxy.Username = "user"
+	// This case covers the legacy per-process DNS routing, which is now opt-in:
+	// by default every lookup gets a fake-ip (see TestFakeIPForAllLookups).
+	off := false
+	c.DNS.FakeIPAll = &off
 	c.Proxy.Password = "pass"
 
 	sb, err := Generate(c)
