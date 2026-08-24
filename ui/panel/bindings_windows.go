@@ -115,6 +115,7 @@ type result struct {
 }
 
 type statRow struct {
+	ID          string `json:"id"` // Clash connection id: lets the panel diff byte counters per connection
 	Process     string `json:"process"`
 	Destination string `json:"destination"`
 	Net         string `json:"net"`
@@ -129,6 +130,10 @@ type statsView struct {
 	Rows   []statRow `json:"rows"`
 	Totals string    `json:"totals"`
 	Error  string    `json:"error"`
+	// Cumulative engine counters (monotonic) — the chart differentiates them for
+	// the total-throughput line.
+	UpTotal   int64 `json:"upTotal"`
+	DownTotal int64 `json:"downTotal"`
 }
 
 // ipcStatus mirrors the fields returned by the service Runtime.Status.
@@ -749,12 +754,12 @@ func (a *app) startDiagnostics(id string) {
 
 func (a *app) startStats(id string) {
 	go func() {
-		rows, totals, err := a.fetchStats()
+		rows, totals, up, down, err := a.fetchStats()
 		if err != nil {
 			a.resolve(id, statsView{Error: err.Error()})
 			return
 		}
-		a.resolve(id, statsView{Rows: rows, Totals: totals})
+		a.resolve(id, statsView{Rows: rows, Totals: totals, UpTotal: up, DownTotal: down})
 	}()
 }
 
@@ -966,6 +971,7 @@ type clashConns struct {
 	DownloadTotal int64 `json:"downloadTotal"`
 	UploadTotal   int64 `json:"uploadTotal"`
 	Connections   []struct {
+		ID       string   `json:"id"` // lets the panel diff per-connection counters
 		Upload   int64    `json:"upload"`
 		Download int64    `json:"download"`
 		Chains   []string `json:"chains"`
@@ -980,17 +986,17 @@ type clashConns struct {
 	} `json:"connections"`
 }
 
-func (a *app) fetchStats() (rows []statRow, totals string, err error) {
+func (a *app) fetchStats() (rows []statRow, totals string, up, down int64, err error) {
 	resp, err := ipc.Call(a.pipe, ipc.Request{Op: ipc.OpStats}, callTimeout)
 	if err != nil {
-		return nil, "", err
+		return nil, "", 0, 0, err
 	}
 	if !resp.OK {
-		return nil, "", fmt.Errorf("%s", resp.Error)
+		return nil, "", 0, 0, fmt.Errorf("%s", resp.Error)
 	}
 	var c clashConns
 	if err := json.Unmarshal(resp.Data, &c); err != nil {
-		return nil, "", err
+		return nil, "", 0, 0, err
 	}
 	for i := range c.Connections {
 		cn := &c.Connections[i]
@@ -1013,6 +1019,7 @@ func (a *app) fetchStats() (rows []statRow, totals string, err error) {
 			dst += ":" + cn.Metadata.DestinationPort
 		}
 		rows = append(rows, statRow{
+			ID:          cn.ID,
 			Process:     p,
 			Destination: dst,
 			Net:         cn.Metadata.Network,
@@ -1024,7 +1031,7 @@ func (a *app) fetchStats() (rows []statRow, totals string, err error) {
 		})
 	}
 	totals = fmt.Sprintf("%d active connections   ↑ %s   ↓ %s", len(rows), humanBytes(c.UploadTotal), humanBytes(c.DownloadTotal))
-	return rows, totals, nil
+	return rows, totals, c.UploadTotal, c.DownloadTotal, nil
 }
 
 func humanBytes(n int64) string {

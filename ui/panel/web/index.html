@@ -151,6 +151,11 @@
   thead tr.colfilters th{padding:4px 6px;background:var(--panel-2)}
   thead tr.colfilters input.cf{width:100%;min-width:60px;padding:3px 6px;font-size:12px}
   .linklike{background:none;border:0;color:var(--accent);cursor:pointer;font-size:12px;padding:2px 4px}
+  .chart{width:100%;height:140px;margin-top:10px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px}
+  #chartTotal{stroke:var(--muted)} #chartProxy{stroke:var(--accent)}
+  .legend{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-left:14px}
+  .legend i{width:14px;height:3px;border-radius:2px;display:inline-block}
+  .legend i.sw-total{background:var(--muted)} .legend i.sw-proxy{background:var(--accent)}
 
   pre.log{background:#0b0f13;color:#d6e2ea;border:1px solid var(--border);border-radius:var(--radius);
     padding:14px;margin:0;max-height:60vh;overflow:auto;white-space:pre-wrap;word-break:break-word;
@@ -213,6 +218,21 @@
           <button class="danger" id="btnUninstall" data-i18n="btn.uninstall">Uninstall</button>
         </div>
         <div class="banner" id="dashBanner"></div>
+      </div>
+
+      <div class="card" style="margin-top:10px">
+        <div class="row" style="align-items:baseline">
+          <h3 data-i18n="chart.title">Traffic</h3>
+          <div class="spacer"></div>
+          <span class="legend"><i class="sw-total"></i><span data-i18n="chart.total">Total (through the tunnel)</span></span>
+          <span class="legend"><i class="sw-proxy"></i><span data-i18n="chart.proxied">Through the proxy</span></span>
+          <span class="muted" id="chartNow">—</span>
+        </div>
+        <svg id="trafficChart" class="chart" viewBox="0 0 600 140" preserveAspectRatio="none" aria-hidden="true">
+          <polyline id="chartTotal" fill="none" stroke-width="1.6" points=""></polyline>
+          <polyline id="chartProxy" fill="none" stroke-width="1.6" points=""></polyline>
+        </svg>
+        <div class="sub muted" id="chartHint" data-i18n="chart.hint">Throughput over the last 5 minutes, sampled every 2s. History is kept while this window is open.</div>
       </div>
     </section>
 
@@ -402,6 +422,9 @@ const I18N = {
     'upd.channel':'Channel','upd.mode':'Mode','upd.mode.off':'Off','upd.mode.notify':'Notify','upd.mode.auto':'Auto',
     'upd.interval':'Check interval','upd.proxy':'Update proxy','upd.proxyPh':'empty=direct · system · use-socks · socks5://host:port',
     'proxymode.direct':'Direct','proxymode.system':'System proxy','proxymode.socks':'Through the SOCKS proxy',
+    'chart.title':'Traffic','chart.total':'Total (through the tunnel)','chart.proxied':'Through the proxy',
+    'chart.hint':'Throughput over the last 5 minutes, sampled every 2s. History is kept while this window is open.',
+    'chart.now':'now: ↑{u} ↓{d} · proxy ↑{pu} ↓{pd}',
     'sw.proxyAll':'Proxy all traffic','hint.proxyAll':'All traffic goes through the proxy and the application list is ignored (bypass ranges and direct subnets still apply).',
     'ph.colFilter':'filter…','btn.clearFilters':'Clear filters',
     'upd.save':'Save','upd.check':'Check now','upd.apply':'Apply update','upd.applying':'Downloading and applying…','upd.restarting':'Update installed — restarting the panel…','upd.upToDate':'Up to date (v{v})','upd.available':'Update available: v{v}','upd.checking':'Checking…','upd.hint':'Trust is verified by signature — the source/CDN is untrusted.',
@@ -438,6 +461,9 @@ const I18N = {
     'upd.channel':'Канал','upd.mode':'Режим','upd.mode.off':'Выкл','upd.mode.notify':'Уведомлять','upd.mode.auto':'Авто',
     'upd.interval':'Интервал проверки','upd.proxy':'Прокси для обновлений','upd.proxyPh':'пусто=напрямую · system · use-socks · socks5://host:port',
     'proxymode.direct':'Напрямую','proxymode.system':'Системный прокси','proxymode.socks':'Через SOCKS-прокси',
+    'chart.title':'Трафик','chart.total':'Всего (через туннель)','chart.proxied':'Через прокси',
+    'chart.hint':'Скорость за последние 5 минут, замер каждые 2 с. История хранится, пока открыто это окно.',
+    'chart.now':'сейчас: ↑{u} ↓{d} · прокси ↑{pu} ↓{pd}',
     'sw.proxyAll':'Проксировать весь трафик','hint.proxyAll':'Весь трафик идёт через прокси, список приложений игнорируется (прямые подсети и bypass по-прежнему действуют).',
     'ph.colFilter':'фильтр…','btn.clearFilters':'Сбросить фильтры',
     'upd.save':'Сохранить','upd.check':'Проверить сейчас','upd.apply':'Установить обновление','upd.applying':'Скачивание и установка…','upd.restarting':'Обновление установлено — перезапуск панели…','upd.upToDate':'Актуальная версия (v{v})','upd.available':'Доступно обновление: v{v}','upd.checking':'Проверка…','upd.hint':'Подлинность проверяется подписью — источник/CDN недоверенный.',
@@ -853,6 +879,76 @@ g('btnUpdApply').onclick = async ()=>{
   // Nothing swapped (e.g. already up to date) — just re-poll status.
   setTimeout(()=>{ g('btnUpdApply').disabled = false; loadUpdate(); refreshState(); }, 6000);
 };
+
+
+/* ---------- traffic chart (dashboard) ---------- */
+// Throughput is sampled from the engine every SAMPLE_MS and kept in memory only:
+// the graph shows the last CHART_WINDOW samples and starts over when the panel is
+// reopened. The total line differentiates the engine's cumulative counters (exact);
+// the proxied line sums per-connection deltas, because the API has no cumulative
+// per-outbound counter — bytes of a connection that both appeared and vanished
+// between two samples are not counted.
+const SAMPLE_MS = 2000, CHART_WINDOW = 150; // 150 x 2s = 5 minutes
+let samples = [];            // {up, down, pup, pdown} bytes per second
+let prevTotals = null;       // {up, down, t}
+let prevConn = new Map();    // connection id -> up+down bytes
+
+function pushSample(v){ samples.push(v); if (samples.length > CHART_WINDOW) samples.shift(); }
+
+// takeSample turns one stats snapshot into a per-second rate sample.
+function takeSample(r){
+  const now = Date.now();
+  const conn = new Map();
+  let proxyBytes = 0;
+  (r.rows||[]).forEach(row=>{
+    const tot = (row.upB||0) + (row.downB||0);
+    conn.set(row.id, tot);
+    if ((row.via||'').includes('proxy')) {
+      const was = prevConn.has(row.id) ? prevConn.get(row.id) : 0;
+      if (tot > was) proxyBytes += tot - was;
+    }
+  });
+  prevConn = conn;
+  if (prevTotals) {
+    const secs = Math.max(0.5, (now - prevTotals.t)/1000);
+    const up = Math.max(0, (r.upTotal||0) - prevTotals.up) / secs;
+    const down = Math.max(0, (r.downTotal||0) - prevTotals.down) / secs;
+    pushSample({up, down, p: proxyBytes/secs});
+  }
+  prevTotals = {up: r.upTotal||0, down: r.downTotal||0, t: now};
+  renderChart();
+}
+
+function renderChart(){
+  const svg = document.getElementById('trafficChart'); if(!svg) return;
+  const W = 600, H = 140, pad = 4;
+  const total = samples.map(s=>s.up + s.down), prox = samples.map(s=>s.p);
+  const peak = Math.max(1024, ...total, ...prox);
+  const pts = arr => arr.map((v,i)=>{
+    const x = samples.length < 2 ? 0 : pad + i*(W-2*pad)/(CHART_WINDOW-1);
+    const y = H - pad - (v/peak)*(H-2*pad);
+    return x.toFixed(1)+','+y.toFixed(1);
+  }).join(' ');
+  document.getElementById('chartTotal').setAttribute('points', pts(total));
+  document.getElementById('chartProxy').setAttribute('points', pts(prox));
+  const last = samples[samples.length-1];
+  const el = document.getElementById('chartNow');
+  if (el) el.textContent = last ? rate(last.up)+' ↑  '+rate(last.down)+' ↓  ·  '+rate(last.p)+' '+t('chart.proxied').toLowerCase() : '—';
+}
+
+// rate formats bytes-per-second compactly.
+function rate(bps){
+  const u = ['B/s','KB/s','MB/s','GB/s']; let i = 0, v = bps||0;
+  while (v >= 1024 && i < u.length-1) { v /= 1024; i++; }
+  return (v < 10 ? v.toFixed(1) : Math.round(v)) + ' ' + u[i];
+}
+
+// Sample continuously (not only on the Statistics tab) so the dashboard graph is
+// already populated when the user opens it.
+async function sampleTraffic(){
+  try { const r = await job('startStats'); if (r && !r.error) takeSample(r); } catch(e){}
+}
+setInterval(sampleTraffic, SAMPLE_MS);
 
 /* ---------- utils + boot ---------- */
 function escapeHtml(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
