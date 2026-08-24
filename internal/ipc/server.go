@@ -24,7 +24,17 @@ type Server struct {
 	actor string
 	mu    sync.Mutex
 	ln    net.Listener
+	// The binding currently serving, kept so a failed Rebind can restore it. A
+	// service with no control pipe is unreachable until it restarts — nothing can
+	// ask it to try again — so Rebind must never end with nothing listening.
+	pipeName string
+	sddl     string
 }
+
+// closeGrace bounds how long Rebind waits for the previous listener to close.
+// Generous on purpose: a healthy close is immediate, so anything near this is the
+// go-winio deadlock described in Rebind, not slowness.
+const closeGrace = 2 * time.Second
 
 // NewServer builds a Server. actor is the identity recorded in the audit log
 // (e.g. the local username).
@@ -48,20 +58,58 @@ func (s *Server) Rebind(pipeName, sddl string) error {
 	// to go first. Serve notices and waits for the replacement; the gap is
 	// sub-millisecond and the panel polls, so a missed RPC is retried.
 	s.mu.Lock()
-	old := s.ln
+	old, prevName, prevSDDL := s.ln, s.pipeName, s.sddl
 	s.ln = nil
 	s.mu.Unlock()
+
+	closeStuck := false
 	if old != nil {
-		old.Close()
+		// Never block on the close. go-winio's listener Close() waits for its
+		// listener goroutine, and that goroutine can be left waiting for a client
+		// who will never arrive: when a short RPC disconnects at the same instant as
+		// the close, the connect fails with ERROR_NO_DATA and the retry re-enters the
+		// wait — but the close signal was already consumed, so nothing wakes it.
+		// Reproduced roughly once per 20 rebinds under a hammering client. This runs
+		// from the pipe supervisor, so waiting here would wedge the control channel
+		// for the rest of the service's life: the panel would never reach it again.
+		done := make(chan struct{})
+		go func() { old.Close(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(closeGrace):
+			closeStuck = true
+		}
 	}
-	ln, err := winio.ListenPipe(pipeName, &winio.PipeConfig{SecurityDescriptor: sddl})
-	if err != nil {
+
+	if ln, err := winio.ListenPipe(pipeName, &winio.PipeConfig{SecurityDescriptor: sddl}); err == nil {
+		s.setListener(ln, pipeName, sddl)
+		return nil
+	} else if closeStuck {
+		// The old listener never closed, so its pipe is still up and still serving:
+		// keep it. The DACL stays more restrictive than intended (which is why the
+		// new bind was refused — Windows will not accept a different descriptor
+		// while that handle is open), but a reachable pipe beats none.
+		s.setListener(old, prevName, prevSDDL)
+		return fmt.Errorf("listen pipe %s: %w (the previous listener did not close within %s; still serving with the previous DACL)", pipeName, err, closeGrace)
+	} else {
+		// The old pipe is genuinely gone. Put the previous binding back so the
+		// service stays reachable, and report why the new one was refused.
+		if prevSDDL != "" {
+			if back, rerr := winio.ListenPipe(prevName, &winio.PipeConfig{SecurityDescriptor: prevSDDL}); rerr == nil {
+				s.setListener(back, prevName, prevSDDL)
+				return fmt.Errorf("listen pipe %s: %w (restored the previous binding)", pipeName, err)
+			}
+		}
 		return fmt.Errorf("listen pipe %s: %w", pipeName, err)
 	}
+}
+
+// setListener publishes the listener now serving, together with the binding that
+// produced it.
+func (s *Server) setListener(ln net.Listener, pipeName, sddl string) {
 	s.mu.Lock()
-	s.ln = ln
+	s.ln, s.pipeName, s.sddl = ln, pipeName, sddl
 	s.mu.Unlock()
-	return nil
 }
 
 // listener returns the current listener.
