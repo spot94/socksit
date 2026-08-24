@@ -72,6 +72,7 @@ type configView struct {
 	Mode             string   `json:"mode"`
 	KillSwitch       bool     `json:"killSwitch"`
 	ShowTray         bool     `json:"showTray"`
+	ProxyAll         bool     `json:"proxyAll"`
 	UDP              bool     `json:"udp"`
 	DirectSubnets    []string `json:"directSubnets"`
 	Apps             []string `json:"apps"`
@@ -96,6 +97,7 @@ type saveInput struct {
 	Mode          string   `json:"mode"`
 	KillSwitch    bool     `json:"killSwitch"`
 	ShowTray      bool     `json:"showTray"`
+	ProxyAll      bool     `json:"proxyAll"`
 	UDP           bool     `json:"udp"`
 	DirectSubnets []string `json:"directSubnets"`
 	Apps          []string `json:"apps"`
@@ -343,6 +345,7 @@ func (a *app) getConfig() configView {
 		Mode:             c.Mode,
 		KillSwitch:       c.KillSwitchOn(),
 		ShowTray:         c.ShowTrayEnabled(),
+		ProxyAll:         c.ProxyAllOn(),
 		UDP:              c.UDPEnabled(),
 		DirectSubnets:    nonNil(c.DirectSubnets),
 		Apps:             nonNil(c.Apps),
@@ -375,6 +378,8 @@ func (a *app) saveConfig(in saveInput) result {
 	c.KillSwitch = &ks
 	tray := in.ShowTray
 	c.ShowTray = &tray
+	all := in.ProxyAll
+	c.ProxyAll = &all
 	c.DirectSubnets = cleanList(in.DirectSubnets)
 	c.Apps = cleanList(in.Apps)
 	c.ConfigSource.URL = strings.TrimSpace(in.CfgURL)

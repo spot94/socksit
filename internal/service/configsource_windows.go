@@ -139,6 +139,10 @@ func (r *Runtime) fetchConfig(ctx context.Context) (configFetchResult, error) {
 	newCfg.Update = cfg.Update
 	newCfg.ConfigSource = cfg.ConfigSource
 	newCfg.Log = cfg.Log // log verbosity is a local diagnostic choice, not server-forced
+	// Client-local switches: the feed never carries them, and replace mode must
+	// not silently reset them to defaults.
+	newCfg.ShowTray = cfg.ShowTray
+	newCfg.ProxyAll = cfg.ProxyAll
 	// Fields the feed actually carries (kill_switch / proxy.udp) are server-forced;
 	// record them so the panel can lock those toggles. Absent = user-defined.
 	newCfg.ConfigSource.Locked = lockedFromFeed(body)

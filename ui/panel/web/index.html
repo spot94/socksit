@@ -70,7 +70,11 @@
   .themebtn:hover,.langsel:hover{color:var(--text)}
 
   /* main */
-  .main{flex:1;overflow:auto;padding:20px 24px}
+  .main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:auto;padding:20px 24px}
+  /* Statistics and Logs grow with the window. A fixed vh cap left dead space
+     below the table on tall windows and clipped it on short ones. */
+  #s-statistics.active,#s-logs.active{display:flex;flex-direction:column;min-height:0;flex:1}
+  #s-statistics .tablewrap,#s-logs pre.log{flex:1;min-height:0;max-height:none}
   .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
   .head h1{font-size:20px;margin:0;font-weight:500;letter-spacing:.1px}
   .pill{font-size:12px;font-weight:500;padding:5px 11px;border-radius:999px;background:var(--panel);border:1px solid var(--border);color:var(--muted);display:inline-flex;gap:7px;align-items:center}
@@ -144,6 +148,9 @@
   th[data-key]{cursor:pointer;user-select:none} th[data-key]:hover{color:var(--text)}
   td.num{text-align:right;font-variant-numeric:tabular-nums}
   .tablewrap{max-height:56vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel)}
+  thead tr.colfilters th{padding:4px 6px;background:var(--panel-2)}
+  thead tr.colfilters input.cf{width:100%;min-width:60px;padding:3px 6px;font-size:12px}
+  .linklike{background:none;border:0;color:var(--accent);cursor:pointer;font-size:12px;padding:2px 4px}
 
   pre.log{background:#0b0f13;color:#d6e2ea;border:1px solid var(--border);border-radius:var(--radius);
     padding:14px;margin:0;max-height:60vh;overflow:auto;white-space:pre-wrap;word-break:break-word;
@@ -224,6 +231,7 @@
             <label class="switch" id="killSw"><input type="checkbox" id="fKill"><span class="track"></span><span data-i18n="sw.killswitch">Kill-switch</span><span class="lockbadge" id="killLock" style="display:none" data-i18n="cfg.managedTag">managed</span></label>
             <label class="switch" id="udpSw"><input type="checkbox" id="fUdp"><span class="track"></span><span data-i18n="sw.udp">Proxy UDP</span><span class="lockbadge" id="udpLock" style="display:none" data-i18n="cfg.managedTag">managed</span></label>
             <label class="switch"><input type="checkbox" id="fTray"><span class="track"></span><span data-i18n="sw.tray">Show in tray</span></label>
+            <label class="switch"><input type="checkbox" id="fProxyAll"><span class="track"></span><span data-i18n="sw.proxyAll">Proxy all traffic</span></label>
           </div>
         </div>
       </div>
@@ -289,6 +297,13 @@
           <th data-key="process">Process</th><th data-key="destination">Destination</th>
           <th data-key="net">Net</th><th data-key="via">Via</th>
           <th data-key="up" style="text-align:right">Up</th><th data-key="down" style="text-align:right">Down</th>
+        </tr>
+        <tr class="colfilters">
+          <th><input type="text" class="cf" data-col="process" data-i18n-ph="ph.colFilter"></th>
+          <th><input type="text" class="cf" data-col="destination" data-i18n-ph="ph.colFilter"></th>
+          <th><input type="text" class="cf" data-col="net" data-i18n-ph="ph.colFilter"></th>
+          <th><input type="text" class="cf" data-col="via" data-i18n-ph="ph.colFilter"></th>
+          <th colspan="2" style="text-align:right"><button id="btnClearFilters" class="linklike" data-i18n="btn.clearFilters">Clear filters</button></th>
         </tr></thead>
         <tbody id="statBody"></tbody></table>
       </div>
@@ -387,6 +402,8 @@ const I18N = {
     'upd.channel':'Channel','upd.mode':'Mode','upd.mode.off':'Off','upd.mode.notify':'Notify','upd.mode.auto':'Auto',
     'upd.interval':'Check interval','upd.proxy':'Update proxy','upd.proxyPh':'empty=direct · system · use-socks · socks5://host:port',
     'proxymode.direct':'Direct','proxymode.system':'System proxy','proxymode.socks':'Through the SOCKS proxy',
+    'sw.proxyAll':'Proxy all traffic','hint.proxyAll':'All traffic goes through the proxy and the application list is ignored (bypass ranges and direct subnets still apply).',
+    'ph.colFilter':'filter…','btn.clearFilters':'Clear filters',
     'upd.save':'Save','upd.check':'Check now','upd.apply':'Apply update','upd.applying':'Downloading and applying…','upd.restarting':'Update installed — restarting the panel…','upd.upToDate':'Up to date (v{v})','upd.available':'Update available: v{v}','upd.checking':'Checking…','upd.hint':'Trust is verified by signature — the source/CDN is untrusted.',
     'cfg.title':'Config source (optional)','cfg.url':'Config URL','cfg.urlPh':'https://…/socksit.yaml — empty = local config','cfg.interval':'Refresh interval','cfg.merge':'On update','cfg.merge.replace':'Replace config','cfg.merge.override':'Override fields','cfg.proxy':'Feed proxy','cfg.proxyPh':'empty = direct · system · use-socks · socks5://host:port','cfg.mergeHint':'Replace: the whole local config is swapped for the remote one. Override: only the fields the remote specifies change; your other settings are kept, and the proxied apps are the remote list plus your own.','cfg.managedApps':'Also proxied, from the managed config:','cfg.managedTag':'managed','cfg.managedSubnets':'Also direct, from the managed config:','cfg.rotate.title':'Key rotation requested','cfg.rotate.msg':'The config server asks to change the trusted key. Accepting moves the root of trust — only accept if you initiated this rotation.','cfg.rotate.accept':'Accept new key','cfg.rotate.decline':'Decline','cfg.rotate.confirm':'Change the trusted key to the proposed one? Only accept if you initiated this.','cfg.signed':'Require signature','cfg.pubkey':'Trusted key (base64)','cfg.pubkeyPh':'Ed25519 public key from `mksign genkey`','cfg.fetch':'Fetch now','cfg.fetching':'Fetching…','cfg.local':'Using the local config.','cfg.fetched':'Last fetched {t}','cfg.changed':' (updated)','cfg.hint':'When set, the config is pulled from this URL and applied automatically (on start and on the interval); local edits are overwritten on refresh. A signed feed (recommended) needs a matching <url>.sig verified with YOUR Trusted key — generate a keypair with `mksign genkey`, put the public half here, sign configs with the private half.'
   },
@@ -421,6 +438,8 @@ const I18N = {
     'upd.channel':'Канал','upd.mode':'Режим','upd.mode.off':'Выкл','upd.mode.notify':'Уведомлять','upd.mode.auto':'Авто',
     'upd.interval':'Интервал проверки','upd.proxy':'Прокси для обновлений','upd.proxyPh':'пусто=напрямую · system · use-socks · socks5://host:port',
     'proxymode.direct':'Напрямую','proxymode.system':'Системный прокси','proxymode.socks':'Через SOCKS-прокси',
+    'sw.proxyAll':'Проксировать весь трафик','hint.proxyAll':'Весь трафик идёт через прокси, список приложений игнорируется (прямые подсети и bypass по-прежнему действуют).',
+    'ph.colFilter':'фильтр…','btn.clearFilters':'Сбросить фильтры',
     'upd.save':'Сохранить','upd.check':'Проверить сейчас','upd.apply':'Установить обновление','upd.applying':'Скачивание и установка…','upd.restarting':'Обновление установлено — перезапуск панели…','upd.upToDate':'Актуальная версия (v{v})','upd.available':'Доступно обновление: v{v}','upd.checking':'Проверка…','upd.hint':'Подлинность проверяется подписью — источник/CDN недоверенный.',
     'cfg.title':'Источник конфига (опц.)','cfg.url':'URL конфига','cfg.urlPh':'https://…/socksit.yaml — пусто = локальный конфиг','cfg.interval':'Интервал обновления','cfg.merge':'При обновлении','cfg.merge.replace':'Заменять конфиг','cfg.merge.override':'Переопределять поля','cfg.proxy':'Proxy для конфига','cfg.proxyPh':'пусто = напрямую · system · use-socks · socks5://host:port','cfg.mergeHint':'Заменять: локальный конфиг целиком меняется на удалённый. Переопределять: меняются только поля, заданные в удалённом; остальные настройки сохраняются, а список приложений = удалённый плюс твои личные.','cfg.managedApps':'Также проксируются, из управляемого конфига:','cfg.managedTag':'из канала','cfg.managedSubnets':'Также напрямую, из управляемого конфига:','cfg.rotate.title':'Запрос на смену ключа','cfg.rotate.msg':'Сервер конфигурации просит сменить доверенный ключ. Принятие меняет корень доверия — принимай только если ты сам инициировал ротацию.','cfg.rotate.accept':'Принять новый ключ','cfg.rotate.decline':'Отклонить','cfg.rotate.confirm':'Сменить доверенный ключ на предложенный? Принимай только если ты это инициировал.','cfg.signed':'Требовать подпись','cfg.pubkey':'Доверенный ключ (base64)','cfg.pubkeyPh':'публичный Ed25519 из `mksign genkey`','cfg.fetch':'Обновить сейчас','cfg.fetching':'Обновление…','cfg.local':'Используется локальный конфиг.','cfg.fetched':'Обновлено {t}','cfg.changed':' (изменён)','cfg.hint':'Если задан — конфиг тянется по этому URL и применяется автоматически (при старте и по интервалу); локальные правки перезаписываются. Для подписанного канала (рекомендуется) нужен <url>.sig, проверяемый ТВОИМ доверенным ключом — сгенерируй пару `mksign genkey`, публичную половину впиши сюда, конфиги подписывай приватной.'
   }
@@ -612,6 +631,15 @@ function setProxySel(id, val){
   }
   sel.value = val;
 }
+// applyProxyAllLock greys out the application list when every app is proxied:
+// the list is ignored in that mode, so showing it as editable would be a lie.
+function applyProxyAllLock(){
+  const on = g('fProxyAll').checked;
+  const card = g('appList') && g('appList').closest('.card');
+  if(card){ card.style.opacity = on ? .45 : 1; card.title = on ? t('hint.proxyAll') : ''; }
+  ['fApp','btnBrowse','btnAddApp','btnReloadProc','fMode'].forEach(id=>{ const e=g(id); if(e) e.disabled = on; });
+}
+
 // applyAuthLock enables the login/password fields only when "Authentication" is
 // on; unchecking it means the stored credentials are cleared on save.
 function applyAuthLock(){
@@ -625,6 +653,8 @@ async function loadSettings(){
   document.getElementById('fPort').value = c.port||1080;
   document.getElementById('fUser').value = '';
   document.getElementById('fPass').value = '';
+  g('fProxyAll').checked = !!c.proxyAll;
+  applyProxyAllLock();
   g('fAuth').checked = !!(last && last.hasCreds); // reflects stored credentials (reported by the service)
   applyAuthLock();
   document.getElementById('fMode').value = c.mode||'allowlist';
@@ -676,6 +706,7 @@ async function loadProcs(){
 document.getElementById('btnReloadProc').onclick = loadProcs;
 g('cfgMerge').onchange = ()=>{ renderApps(); renderSubnets(); };
 g('fAuth').onchange = applyAuthLock;
+g('fProxyAll').onchange = applyProxyAllLock;
 document.getElementById('btnBrowse').onclick = async ()=>{ const p = await call('appBrowseExe'); if(p){ const i=document.getElementById('fApp'); i.value = p; i.focus(); } };
 document.getElementById('btnAddApp').onclick = ()=>{ const i=document.getElementById('fApp'); const v=(i.value||'').trim(); if(v){ apps.push(v); i.value=''; renderApps(); } };
 document.getElementById('fApp').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); document.getElementById('btnAddApp').click(); }});
@@ -694,7 +725,7 @@ function collect(){
   return { address:document.getElementById('fAddress').value.trim(), port:parseInt(document.getElementById('fPort').value||'1080',10),
     username:document.getElementById('fUser').value, password:document.getElementById('fPass').value, auth:document.getElementById('fAuth').checked,
     mode:document.getElementById('fMode').value, killSwitch:document.getElementById('fKill').checked,
-    udp:document.getElementById('fUdp').checked, showTray:document.getElementById('fTray').checked,
+    udp:document.getElementById('fUdp').checked, showTray:document.getElementById('fTray').checked, proxyAll:document.getElementById('fProxyAll').checked,
     directSubnets:subnets.slice(), apps:apps.slice(),
     cfgUrl:document.getElementById('cfgUrl').value.trim(), cfgInterval:document.getElementById('cfgInterval').value.trim()||'1h', cfgMerge:document.getElementById('cfgMerge').value, cfgProxy:document.getElementById('cfgProxy').value.trim(), cfgSigned:document.getElementById('cfgSigned').checked, cfgPubKey:document.getElementById('cfgPubKey').value.trim() };
 }
@@ -732,7 +763,14 @@ function sortRows(rows){
 }
 function renderStats(){
   const fEl=document.getElementById('statFilter'); const q = (fEl?fEl.value:'').toLowerCase();
-  let rows = statRows.filter(r=>!q || (r.process+' '+r.destination+' '+r.net+' '+r.via).toLowerCase().includes(q));
+  // Global box searches every column; the per-column boxes narrow further (AND).
+  const cols = {};
+  document.querySelectorAll('#s-statistics input.cf').forEach(i=>{ const v=(i.value||'').trim().toLowerCase(); if(v) cols[i.dataset.col]=v; });
+  let rows = statRows.filter(r=>{
+    if(q && !(r.process+' '+r.destination+' '+r.net+' '+r.via).toLowerCase().includes(q)) return false;
+    for(const c in cols){ if(!String(r[c]||'').toLowerCase().includes(cols[c])) return false; }
+    return true;
+  });
   rows = sortRows(rows);
   document.querySelectorAll('#s-statistics th[data-key]').forEach(th=>{
     const k=th.dataset.key; th.textContent = t('th.'+k) + (sortKey===k ? (sortDir>0?' ▲':' ▼') : '');
@@ -744,6 +782,12 @@ function renderStats(){
 }
 document.getElementById('btnStats').onclick = refreshStats;
 document.getElementById('statFilter').oninput = renderStats;
+document.querySelectorAll('#s-statistics input.cf').forEach(i=>{ i.oninput = renderStats; });
+document.getElementById('btnClearFilters').onclick = ()=>{
+  document.getElementById('statFilter').value='';
+  document.querySelectorAll('#s-statistics input.cf').forEach(i=>{ i.value=''; });
+  renderStats();
+};
 document.querySelectorAll('#s-statistics th[data-key]').forEach(th=>{
   th.onclick = ()=>{ const k=th.dataset.key; if(sortKey===k) sortDir=-sortDir; else { sortKey=k; sortDir=1; } renderStats(); };
 });

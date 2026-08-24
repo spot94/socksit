@@ -114,13 +114,14 @@ func (r *Runtime) Run(ctx context.Context) error {
 	// changes here — doing so reacts to sing-box's own auto_route edits and causes
 	// restart churn (proxy works for a few seconds, then drops). See U6 revision.
 
-	// IPC control server.
+	// IPC control server. Its DACL must grant whoever is logged in, so it is
+	// rebound when the interactive user appears or changes (see superviseControlPipe).
 	srv := ipc.NewServer(r, auditLog, r.Actor)
-	sddl := ipc.BuildSDDL(consoleUserSID(r.log))
-	if err := srv.Listen(r.PipeName, sddl); err != nil {
+	if err := srv.Rebind(r.PipeName, ipc.BuildSDDL(r.interactiveUserSID())); err != nil {
 		return fmt.Errorf("could not create the control pipe %s — this needs the installed service (LocalSystem) or an elevated (Administrator) console: %w", r.PipeName, err)
 	}
 	go srv.Serve(ctx)
+	go r.superviseControlPipe(ctx, srv)
 	defer srv.Close()
 
 	// Keep a tray alive in the interactive session for as long as the service
@@ -134,6 +135,63 @@ func (r *Runtime) Run(ctx context.Context) error {
 	go r.superviseConfigSource(ctx)
 
 	return r.superviseLoop(ctx)
+}
+
+// pipeRebindInterval is how often the control pipe DACL is re-checked against
+// the interactive user.
+const pipeRebindInterval = 5 * time.Second
+
+// systemSID is LocalSystem. Granting it on the control pipe is pointless (it
+// already has full access) and, worse, hides the fact that no real user was
+// granted — which is exactly how the panel ended up usable only when elevated.
+const systemSID = "S-1-5-18"
+
+// interactiveUserSID is the SID to grant read/write on the control pipe: the user
+// of the active console session. It returns "" when nobody is logged in yet — at
+// boot the service starts before logon, so the pipe is briefly limited to
+// SYSTEM+Administrators and superviseControlPipe rebinds it once a user appears.
+//
+// In an interactive dev run (`socksit run`) the process user IS the operator, so
+// fall back to it — but never to SYSTEM: that used to happen silently under the
+// SCM and locked the unelevated panel out of its own service for the whole uptime.
+func (r *Runtime) interactiveUserSID() string {
+	if sid, err := ipc.ResolveConsoleUserSID(); err == nil {
+		return sid
+	}
+	if sid, err := ipc.CurrentUserSID(); err == nil && sid != systemSID {
+		return sid
+	}
+	return ""
+}
+
+// superviseControlPipe keeps the pipe DACL in step with whoever is logged in:
+// it rebinds on first logon, on fast user switching and after a session change.
+func (r *Runtime) superviseControlPipe(ctx context.Context, srv *ipc.Server) {
+	bound := r.interactiveUserSID()
+	if bound == "" {
+		r.logf("INFO", "no interactive user yet — control pipe limited to SYSTEM+Administrators until someone logs in")
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(pipeRebindInterval):
+		}
+		sid := r.interactiveUserSID()
+		if sid == bound {
+			continue
+		}
+		if err := srv.Rebind(r.PipeName, ipc.BuildSDDL(sid)); err != nil {
+			r.logf("WARN", "could not rebind the control pipe for the interactive user: %v", err)
+			continue
+		}
+		bound = sid
+		if sid == "" {
+			r.logf("INFO", "interactive user signed out — control pipe limited to SYSTEM+Administrators")
+		} else {
+			r.logf("INFO", "control pipe rebound to grant the interactive user (%s)", sid)
+		}
+	}
 }
 
 // superviseLoop (re)generates the engine config and supervises it, restarting

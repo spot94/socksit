@@ -34,6 +34,7 @@ func Generate(c *config.Config) (*Config, error) {
 	regexes := appRegexes(apps)
 	names := appNames(apps)
 	allow := c.Mode == config.ModeAllowlist
+	proxyAll := c.ProxyAllOn() // local switch: everything through the proxy, app list ignored
 
 	out := &Config{
 		Log: &Log{Level: c.LogLevel(), Timestamp: true}, // default warn: avoid per-connection INFO log bloat
@@ -98,10 +99,17 @@ func Generate(c *config.Config) (*Config, error) {
 	// app simply looks like it is not handled at all. Deny AAAA to the proxied set
 	// so it falls back to A, gets a fake-ip and enters the tunnel. Must precede the
 	// fake-ip routing rules below.
-	for _, r := range aaaaDenyRules(allow, names, regexes) {
-		out.DNS.Rules = append(out.DNS.Rules, r)
+	if proxyAll {
+		// Everything is proxied, so nothing may resolve AAAA (v4-only datapath).
+		out.DNS.Rules = append(out.DNS.Rules, DNSRule{QueryType: []string{"AAAA"}, Action: "reject"})
+	} else {
+		for _, r := range aaaaDenyRules(allow, names, regexes) {
+			out.DNS.Rules = append(out.DNS.Rules, r)
+		}
 	}
-	if allow {
+	if proxyAll {
+		// No per-app DNS routing: the app list is ignored in this mode.
+	} else if allow {
 		// The proxied set resolves through fake-ip. Match by name AND by path so a
 		// process whose full path can't be read (sandboxed child) still qualifies.
 		if len(names) > 0 {
@@ -132,6 +140,13 @@ func Generate(c *config.Config) (*Config, error) {
 	// User-chosen bypass subnets always go direct (before the per-app rule).
 	if subnets := trimAll(c.EffectiveSubnets()); len(subnets) > 0 {
 		rules = append(rules, RouteRule{IPCIDR: subnets, Action: "route", Outbound: tagDirect})
+	}
+	if proxyAll {
+		// Route everything left after the direct/bypass rules above to the proxy and
+		// skip the per-app rules entirely — that is what "proxy all traffic" means.
+		out.Route.Final = tagProxy
+		out.Route.Rules = rules
+		return out, nil
 	}
 	appOutbound := tagProxy
 	if !allow {

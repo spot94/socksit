@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"sync"
+	"time"
 
 	"github.com/Microsoft/go-winio"
 	"socksit/internal/audit"
@@ -20,6 +22,7 @@ type Server struct {
 	h     Handler
 	log   *audit.Logger
 	actor string
+	mu    sync.Mutex
 	ln    net.Listener
 }
 
@@ -30,26 +33,72 @@ func NewServer(h Handler, log *audit.Logger, actor string) *Server {
 }
 
 // Listen creates the pipe with the given SDDL DACL.
-func (s *Server) Listen(pipeName, sddl string) error {
+// Listen binds the control pipe with the given DACL.
+func (s *Server) Listen(pipeName, sddl string) error { return s.Rebind(pipeName, sddl) }
+
+// Rebind re-creates the pipe with a new DACL and hands it to a running Serve
+// loop. It exists because the DACL must grant the CURRENT interactive user: the
+// service starts before anyone logs in, so the first DACL cannot name a user and
+// has to be replaced once one appears. In-flight requests are short RPCs; the old
+// listener is closed after the new one is in place so there is no window without
+// a pipe.
+func (s *Server) Rebind(pipeName, sddl string) error {
+	// Windows refuses to create another instance of an existing pipe with a
+	// DIFFERENT security descriptor (ERROR_ACCESS_DENIED), so the old listener has
+	// to go first. Serve notices and waits for the replacement; the gap is
+	// sub-millisecond and the panel polls, so a missed RPC is retried.
+	s.mu.Lock()
+	old := s.ln
+	s.ln = nil
+	s.mu.Unlock()
+	if old != nil {
+		old.Close()
+	}
 	ln, err := winio.ListenPipe(pipeName, &winio.PipeConfig{SecurityDescriptor: sddl})
 	if err != nil {
 		return fmt.Errorf("listen pipe %s: %w", pipeName, err)
 	}
+	s.mu.Lock()
 	s.ln = ln
+	s.mu.Unlock()
 	return nil
 }
 
+// listener returns the current listener.
+func (s *Server) listener() net.Listener {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ln
+}
+
 // Serve accepts connections until ctx is cancelled or the listener closes.
+// Serve accepts requests until ctx ends. It survives Rebind: when the listener
+// it was accepting on is replaced, it continues on the new one.
 func (s *Server) Serve(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
-		s.ln.Close()
+		s.Close()
 	}()
 	for {
-		conn, err := s.ln.Accept()
+		ln := s.listener()
+		if ln == nil {
+			// Mid-rebind: the old listener is closed and the new one is not up yet.
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(20 * time.Millisecond):
+			}
+			continue
+		}
+		conn, err := ln.Accept()
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
+			}
+			// Rebind closed this listener: nil means the replacement is still being
+			// created, a different one means it is already up. Either way keep serving.
+			if s.listener() != ln {
+				continue
 			}
 			return err
 		}
@@ -59,8 +108,12 @@ func (s *Server) Serve(ctx context.Context) error {
 
 // Close stops the listener.
 func (s *Server) Close() error {
-	if s.ln != nil {
-		return s.ln.Close()
+	s.mu.Lock()
+	ln := s.ln
+	s.ln = nil
+	s.mu.Unlock()
+	if ln != nil {
+		return ln.Close()
 	}
 	return nil
 }

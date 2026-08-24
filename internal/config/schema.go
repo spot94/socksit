@@ -60,7 +60,12 @@ type Config struct {
 	// service is installed it keeps a tray running; false = no tray is launched
 	// and a running one exits. Consumed by the service tray-keeper and the tray
 	// itself, not the engine. See internal/service/traykeeper_windows.go.
-	ShowTray *bool   `yaml:"show_tray"`
+	ShowTray *bool `yaml:"show_tray"`
+	// ProxyAll routes EVERYTHING through the proxy and ignores the app list
+	// (bypass_cidrs and direct_subnets still apply). It is a client-local switch:
+	// like show_tray it is never taken from a managed feed, so an operator cannot
+	// turn a machine into a full tunnel remotely.
+	ProxyAll *bool   `yaml:"proxy_all"`
 	DNS      DNS     `yaml:"dns"`
 	Control  Control `yaml:"control"`
 	// Log controls diagnostic verbosity. Level is a client-local preference
@@ -492,6 +497,10 @@ func (c *Config) LogLevel() string {
 // ShowTrayEnabled reports the effective tray setting (default true, so configs
 // written before this option keep showing the tray).
 func (c *Config) ShowTrayEnabled() bool { return c.ShowTray == nil || *c.ShowTray }
+
+// ProxyAllOn reports whether every application is proxied, ignoring the app
+// list (default false).
+func (c *Config) ProxyAllOn() bool { return c.ProxyAll != nil && *c.ProxyAll }
 
 // UDPEnabled reports the effective proxy UDP setting (default true).
 func (c *Config) UDPEnabled() bool { return c.Proxy.UDP == nil || *c.Proxy.UDP }

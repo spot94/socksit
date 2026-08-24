@@ -4,14 +4,11 @@ package service
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"time"
 
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/debug"
 
-	"socksit/internal/ipc"
 	"socksit/internal/secret"
 )
 
@@ -25,22 +22,6 @@ const ServiceName = "SocksIt"
 const stopGrace = 15 * time.Second
 
 func secretStore() *secret.Store { return secret.New(credentialEntropy) }
-
-// consoleUserSID resolves the user to grant on the pipe DACL (plan U8, variant B).
-// As a LocalSystem service it uses WTS to find the interactive console user. When
-// run interactively (e.g. `socksit run`), WTSQueryUserToken needs SeTcbPrivilege
-// (SYSTEM only), so we fall back to the current process user — which IS the
-// operator in that mode. Only if both fail is the pipe limited to SYSTEM+Admins.
-func consoleUserSID(log io.Writer) string {
-	if sid, err := ipc.ResolveConsoleUserSID(); err == nil {
-		return sid
-	}
-	if sid, err := ipc.CurrentUserSID(); err == nil {
-		return sid
-	}
-	fmt.Fprintln(log, "could not resolve a user SID; pipe limited to SYSTEM+Admins")
-	return ""
-}
 
 // handler adapts Runtime to the SCM lifecycle.
 type handler struct{ rt *Runtime }
