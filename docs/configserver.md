@@ -124,6 +124,8 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml -f docker-compo
 | Operator filter | `(memberOf=CN=SocksIt-Operators,OU=Groups,DC=corp,DC=local)` | так же |
 | Display attribute | `displayName` | показывается рядом с **Выход** для LDAP-пользователей |
 
+<img src="img/configserver-ldap.png" width="820" alt="Конфиг-сервер — настройка LDAP: сервис-аккаунт, фильтры Администратора и Оператора">
+
 Схема входа (bind сервис-аккаунтом): сервер биндится сервис-аккаунтом, ищет в Base DN
 по user-фильтру, **пере-биндится под пользователем** для проверки пароля, затем
 определяет роль — сначала Administrator-фильтр, иначе Operator-фильтр; не подошедший ни
@@ -153,6 +155,8 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml -f docker-compo
                            # идти через тот же SOCKS-прокси, который он настраивает — оставьте
                            # пустым, если конфиг-сервер доступен только через прокси.
    ```
+
+<img src="img/configserver-profile.png" width="820" alt="Конфиг-сервер — редактор профиля: прокси, режим, приложения, прямые подсети и домены">
 
 Клиенты тянут фид при старте и по своему интервалу, проверяют подпись доверенным
 `pubkey` и применяют его. Ротация ключа пере-подписывает все профили — после неё
