@@ -32,7 +32,17 @@ func (r *Runtime) UpdateStatus() (any, error) {
 // UpdateCheck runs a check now and returns the result. Errors are folded into
 // Result.Error so the UI always gets a payload.
 func (r *Runtime) UpdateCheck() (any, error) {
-	res, _ := r.runUpdateCheck(context.Background())
+	res, err := r.runUpdateCheck(context.Background())
+	// Record it like a scheduled check: the user just asked, so the next automatic
+	// one is due an interval from now. A failed manual check also starts the retry
+	// grace, so a broken endpoint is not polled from two places at once.
+	st := r.loadUpdateState()
+	if err != nil {
+		st.LastFail = time.Now()
+	} else {
+		st.LastCheck, st.LastFail = time.Now(), time.Time{}
+	}
+	r.saveUpdateState(st)
 	return res, nil
 }
 
@@ -59,7 +69,14 @@ func (r *Runtime) runUpdateCheck(ctx context.Context) (updates.Result, error) {
 // superviseUpdates periodically checks for updates when enabled (notify-only in
 // this phase — it never applies anything). Runs until ctx is cancelled.
 func (r *Runtime) superviseUpdates(ctx context.Context) {
-	timer := time.NewTimer(30 * time.Second) // let startup settle first
+	// The schedule is wall-clock, not a long timer. A timer only measures uptime,
+	// so on a PC switched off every night a 24h interval never elapsed: the real
+	// cadence was the boot-time check, once per start, whatever check_interval
+	// said. Waking often and comparing a persisted timestamp against the clock
+	// gives the setting one meaning across reboots, sleep and edits — an interval
+	// changed in the panel takes effect on the next tick instead of after the old
+	// timer finally fires.
+	timer := time.NewTimer(updateSettle)
 	defer timer.Stop()
 	for {
 		select {
@@ -67,36 +84,54 @@ func (r *Runtime) superviseUpdates(ctx context.Context) {
 			return
 		case <-timer.C:
 		}
-		next := time.Hour // when disabled, re-read config hourly
+		timer.Reset(updateTick)
+
 		cfg := r.lenientConfig()
-		if cfg.UpdatesEnabled() {
-			if _, err := r.runUpdateCheck(ctx); err != nil {
-				r.logf("WARN", "update check failed: %v", err)
-			} else if res := r.lastUpdate.Load(); res != nil && res.HasUpdate {
-				r.logf("INFO", "update available: %s (current %s)", res.Available, res.Current)
-				if strings.EqualFold(cfg.Update.Mode, config.UpdateAuto) {
-					r.maybeAutoApply(res.Available)
-				}
-			}
-			next = cfg.CheckEvery()
+		if !cfg.UpdatesEnabled() {
+			continue
 		}
-		timer.Reset(next)
+		st := r.loadUpdateState()
+		now := time.Now()
+		if !updateDue(st, cfg.CheckEvery(), now) {
+			continue
+		}
+		res, err := r.runUpdateCheck(ctx)
+		if err != nil {
+			st.LastFail = now
+			r.saveUpdateState(st)
+			r.logf("WARN", "update check failed: %v", err)
+			continue
+		}
+		st.LastCheck, st.LastFail = now, time.Time{}
+		if !res.HasUpdate {
+			r.saveUpdateState(st)
+			continue
+		}
+		r.logf("INFO", "update available: %s (current %s)", res.Available, res.Current)
+		if !strings.EqualFold(cfg.Update.Mode, config.UpdateAuto) {
+			r.saveUpdateState(st)
+			continue
+		}
+		if !autoDue(st, res.Available, now) {
+			r.saveUpdateState(st)
+			continue
+		}
+		// Record the attempt BEFORE making it: a successful apply restarts the
+		// service, so anything written afterwards would never be written at all.
+		st.AutoVersion, st.AutoAt = res.Available, now
+		r.saveUpdateState(st)
+		r.autoApply(res.Available)
 	}
 }
 
-// maybeAutoApply installs an available update (auto mode), at most once per
-// version. The dedupe stops the same version being re-attempted every interval if
-// an apply keeps failing; a successful apply restarts the service into the new
-// build anyway (so Newer() is false next time).
-func (r *Runtime) maybeAutoApply(version string) {
-	if v, _ := r.autoApplied.Load().(string); v == version {
-		return
-	}
-	r.autoApplied.Store(version)
+// autoApply installs an update without asking. Whether it may run at all, and
+// whether this version has been tried too recently, is decided by the caller
+// against the persisted schedule.
+func (r *Runtime) autoApply(version string) {
 	r.logf("INFO", "update: mode=auto — downloading and applying %s", version)
 	res, err := r.applyUpdate()
 	if err != nil {
-		r.logf("ERROR", "auto-update failed: %v", err)
+		r.logf("ERROR", "auto-update failed: %v (retrying no sooner than %s from now)", err, autoRetryGrace)
 		return
 	}
 	r.logf("INFO", "auto-update: %s", res.Message)

@@ -55,13 +55,12 @@ type Runtime struct {
 	Actor      string // audit actor (local username)
 	Version    string // app version, reported to the update check
 
-	enabled     atomic.Bool
-	sup         atomic.Pointer[engine.Supervisor]
-	restartCh   chan struct{}
-	log         io.Writer
-	lastUpdate  atomic.Pointer[updates.Result]
-	autoApplied atomic.Value // string: last version auto-applied, so auto mode won't re-attempt the same one
-	lastConfig  atomic.Pointer[configFetchResult]
+	enabled    atomic.Bool
+	sup        atomic.Pointer[engine.Supervisor]
+	restartCh  chan struct{}
+	log        io.Writer
+	lastUpdate atomic.Pointer[updates.Result]
+	lastConfig atomic.Pointer[configFetchResult]
 }
 
 func (r *Runtime) configPath() string { return filepath.Join(r.DataDir, "socksit.yaml") }
