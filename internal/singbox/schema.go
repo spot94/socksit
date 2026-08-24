@@ -98,6 +98,7 @@ type RouteRule struct {
 	IPCIDR           []string `json:"ip_cidr,omitempty"`
 	IPIsPrivate      bool     `json:"ip_is_private,omitempty"`
 	Domain           []string `json:"domain,omitempty"`
+	DomainSuffix     []string `json:"domain_suffix,omitempty"`
 	ProcessName      []string `json:"process_name,omitempty"`
 	ProcessPathRegex []string `json:"process_path_regex,omitempty"`
 	Outbound         string   `json:"outbound,omitempty"`

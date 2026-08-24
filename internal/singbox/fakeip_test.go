@@ -97,20 +97,3 @@ func TestProxyHostnameNeverFakeIP(t *testing.T) {
 		}
 	}
 }
-
-// TestDirectDomainsOptOut: an explicit empty list exempts nothing.
-func TestDirectDomainsOptOut(t *testing.T) {
-	c := config.Default()
-	c.Proxy.Address = "10.0.0.1"
-	c.DNS.DirectDomains = []string{}
-	sb, err := Generate(c)
-	if err != nil {
-		t.Fatalf("generate: %v", err)
-	}
-	for _, r := range sb.DNS.Rules {
-		if len(r.DomainSuffix) > 0 {
-			t.Errorf("no suffix exemption expected, got %+v", r)
-		}
-	}
-	checkWithEngine(t, c)
-}

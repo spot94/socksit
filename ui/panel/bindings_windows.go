@@ -75,6 +75,7 @@ type configView struct {
 	ProxyAll         bool     `json:"proxyAll"`
 	UDP              bool     `json:"udp"`
 	DirectSubnets    []string `json:"directSubnets"`
+	DirectDomains    []string `json:"directDomains"`
 	Apps             []string `json:"apps"`
 	CfgURL           string   `json:"cfgUrl"`
 	CfgInterval      string   `json:"cfgInterval"`
@@ -100,6 +101,7 @@ type saveInput struct {
 	ProxyAll      bool     `json:"proxyAll"`
 	UDP           bool     `json:"udp"`
 	DirectSubnets []string `json:"directSubnets"`
+	DirectDomains []string `json:"directDomains"`
 	Apps          []string `json:"apps"`
 	CfgURL        string   `json:"cfgUrl"`
 	CfgInterval   string   `json:"cfgInterval"`
@@ -353,6 +355,7 @@ func (a *app) getConfig() configView {
 		ProxyAll:         c.ProxyAllOn(),
 		UDP:              c.UDPEnabled(),
 		DirectSubnets:    nonNil(c.DirectSubnets),
+		DirectDomains:    nonNil(c.EffectiveDirectDomains()),
 		Apps:             nonNil(c.Apps),
 		CfgURL:           c.ConfigSource.URL,
 		CfgInterval:      c.ConfigSource.Interval,
@@ -386,6 +389,7 @@ func (a *app) saveConfig(in saveInput) result {
 	all := in.ProxyAll
 	c.ProxyAll = &all
 	c.DirectSubnets = cleanList(in.DirectSubnets)
+	c.DirectDomains = cleanList(in.DirectDomains)
 	c.Apps = cleanList(in.Apps)
 	c.ConfigSource.URL = strings.TrimSpace(in.CfgURL)
 	if strings.TrimSpace(in.CfgInterval) != "" {

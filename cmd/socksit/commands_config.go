@@ -37,6 +37,12 @@ func configCmd() *command {
 				{Name: "rm", Aliases: []string{"remove"}, Summary: "remove a CIDR", Run: cmdConfigSubnetRm},
 				{Name: "list", Aliases: []string{"ls"}, Summary: "list direct subnets", Run: cmdConfigSubnetList},
 			}},
+			{Name: "domain", Summary: "add/remove/list names never sent to the proxy", Children: []*command{
+				{Name: "add", Summary: "add a direct name", Run: cmdConfigDomainAdd},
+				{Name: "rm", Aliases: []string{"remove"}, Summary: "remove a direct name", Run: cmdConfigDomainRm},
+				{Name: "list", Aliases: []string{"ls"}, Summary: "list direct names", Run: cmdConfigDomainList},
+				{Name: "reset", Summary: "restore the built-in direct names", Run: cmdConfigDomainReset},
+			}},
 			{Name: "bypass", Summary: "add/remove/list ranges kept out of the tunnel", Children: []*command{
 				{Name: "add", Summary: "add a bypass CIDR", Run: cmdConfigBypassAdd},
 				{Name: "rm", Aliases: []string{"remove"}, Summary: "remove a bypass CIDR", Run: cmdConfigBypassRm},
@@ -438,6 +444,93 @@ func cmdConfigBypassList(path string, args []string) error {
 		fmt.Println(s)
 	}
 	return nil
+}
+
+// --- direct domains: names that never go through the proxy ---
+
+func cmdConfigDomainAdd(path string, args []string) error {
+	fs := newFlagSet(path, "<name> [more ...]", "route these names direct and keep them off fake-ip")
+	_ = fs.Parse(args)
+	if fs.NArg() == 0 {
+		fs.Usage()
+		return errSilent
+	}
+	for _, s := range fs.Args() {
+		if err := config.ValidDomainEntry(s); err != nil {
+			return err
+		}
+	}
+	return editConfig(func(c *config.Config) (string, error) {
+		cur := c.EffectiveDirectDomains() // materialize the defaults before editing
+		added := 0
+		for _, s := range fs.Args() {
+			s = strings.TrimSpace(s)
+			if containsFold(cur, s) {
+				continue
+			}
+			cur = append(cur, s)
+			added++
+		}
+		if added == 0 {
+			return "", errNoChange
+		}
+		c.DirectDomains = cur
+		return fmt.Sprintf("%d name(s) added — %d total", added, len(cur)), nil
+	})
+}
+
+func cmdConfigDomainRm(path string, args []string) error {
+	fs := newFlagSet(path, "<name> [more ...]", "remove names from the direct list")
+	_ = fs.Parse(args)
+	if fs.NArg() == 0 {
+		fs.Usage()
+		return errSilent
+	}
+	return editConfig(func(c *config.Config) (string, error) {
+		cur := c.EffectiveDirectDomains()
+		removed := 0
+		for _, s := range fs.Args() {
+			next := removeFold(cur, strings.TrimSpace(s))
+			if len(next) != len(cur) {
+				removed++
+			}
+			cur = next
+		}
+		if removed == 0 {
+			return "", errNoChange
+		}
+		if cur == nil {
+			cur = []string{} // explicit empty: defaults stay disabled
+		}
+		c.DirectDomains = cur
+		return fmt.Sprintf("%d name(s) removed — %d left", removed, len(cur)), nil
+	})
+}
+
+func cmdConfigDomainList(path string, args []string) error {
+	fs := newFlagSet(path, "[--json]", "list the names never sent to the proxy")
+	asJSON := fs.Bool("json", false, "machine-readable output")
+	_ = fs.Parse(args)
+	c, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	list := c.EffectiveDirectDomains()
+	if *asJSON {
+		return printJSON(os.Stdout, list)
+	}
+	for _, s := range list {
+		fmt.Println(s)
+	}
+	return nil
+}
+
+func cmdConfigDomainReset(path string, args []string) error {
+	_ = newFlagSet(path, "", "restore the built-in direct names").Parse(args)
+	return editConfig(func(c *config.Config) (string, error) {
+		c.DirectDomains = append([]string(nil), config.DefaultDirectDomains...)
+		return "direct name list reset to defaults", nil
+	})
 }
 
 func cmdConfigBypassReset(path string, args []string) error {

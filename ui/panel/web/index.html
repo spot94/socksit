@@ -247,6 +247,7 @@
           <label class="fld"><span data-i18n="lbl.password">Password</span> <span class="muted" data-i18n="note.passBlank">(blank = keep)</span><input type="password" id="fPass" data-i18n-ph="ph.keep"></label>
           <label class="fld"><span data-i18n="lbl.mode">Mode</span><select id="fMode"><option value="allowlist" data-i18n="opt.allowlist">allowlist — only listed apps</option><option value="blocklist" data-i18n="opt.blocklist">blocklist — all except listed</option></select></label>
           <label class="fld" for="subnetInput"><span data-i18n="lbl.bypass">Bypass subnets</span><div class="chips" id="subnetChips"><input type="text" id="subnetInput" class="chipinput" data-i18n-ph="ph.subnet"></div></label>
+          <label class="fld" for="domainInput"><span data-i18n="lbl.directDomains">Direct names</span> <span class="muted" data-i18n="note.directDomains">(never via the proxy)</span><div class="chips" id="domainChips"><input type="text" id="domainInput" class="chipinput" data-i18n-ph="ph.domain"></div></label>
           <div class="wide row" style="gap:22px">
             <label class="switch" id="killSw"><input type="checkbox" id="fKill"><span class="track"></span><span data-i18n="sw.killswitch">Kill-switch</span><span class="lockbadge" id="killLock" style="display:none" data-i18n="cfg.managedTag">managed</span></label>
             <label class="switch" id="udpSw"><input type="checkbox" id="fUdp"><span class="track"></span><span data-i18n="sw.udp">Proxy UDP</span><span class="lockbadge" id="udpLock" style="display:none" data-i18n="cfg.managedTag">managed</span></label>
@@ -409,6 +410,7 @@ const I18N = {
     'h.proxiedApps':'Proxied applications','ph.app':'app.exe or full path','btn.browse':'Browse…','btn.add':'Add','title.reloadProc':'Refresh running processes',
     'hint.apps':'Exact .exe name (any folder) or a full path. For web apps add the browser (chrome.exe / msedge.exe).','btn.save':'Save & apply',
     'msg.noApps':'No apps yet.','title.remove':'Remove','ph.subnet':'add subnet (Enter)','title.editChip':'Double-click to edit',
+    'lbl.directDomains':'Direct names','note.directDomains':'(never via the proxy)','ph.domain':'add name (Enter)',
     'ph.filter':'filter…','sw.auto':'Auto','btn.refresh':'Refresh',
     'th.process':'Process','th.destination':'Destination','th.net':'Net','th.via':'Via','th.up':'Up','th.down':'Down',
     'stat.noData':'No data yet — click Refresh.','stat.noMatch':'No matching connections.',
@@ -448,6 +450,7 @@ const I18N = {
     'h.proxiedApps':'Проксируемые приложения','ph.app':'app.exe или полный путь','btn.browse':'Обзор…','btn.add':'Добавить','title.reloadProc':'Обновить список процессов',
     'hint.apps':'Точное имя .exe (в любой папке) или полный путь. Для веб-приложений добавьте браузер (chrome.exe / msedge.exe).','btn.save':'Сохранить и применить',
     'msg.noApps':'Пока нет приложений.','title.remove':'Удалить','ph.subnet':'подсеть + Enter','title.editChip':'Двойной клик — редактировать',
+    'lbl.directDomains':'Прямые домены','note.directDomains':'(никогда через прокси)','ph.domain':'домен + Enter',
     'ph.filter':'фильтр…','sw.auto':'Авто','btn.refresh':'Обновить',
     'th.process':'Процесс','th.destination':'Назначение','th.net':'Сеть','th.via':'Через','th.up':'Отпр.','th.down':'Получ.',
     'stat.noData':'Пока нет данных — нажмите «Обновить».','stat.noMatch':'Нет подходящих соединений.',
@@ -614,6 +617,32 @@ function validCidr(s){
   if(s.includes(':') && /^[0-9a-fA-F:.]+\/\d{1,3}$/.test(s)) return +s.split('/')[1]<=128; // loose IPv6
   return false;
 }
+let domains = [];
+// Mirrors config.ValidDomainEntry: a CIDR, URL or wildcard typed here would
+// silently match nothing, so reject it at the input instead.
+function validDomain(s){
+  s=(s||'').trim();
+  if(s.length<2 || /[\s/:*?,]/.test(s) || s.includes('..')) return false;
+  return s.replace(/^\./,'').includes('.') || !s.startsWith('.');
+}
+function renderDomains(){
+  const box=g('domainChips'), input=g('domainInput'); if(!box||!input) return;
+  [...box.querySelectorAll('.chip')].forEach(c=>c.remove());
+  const frag=document.createDocumentFragment();
+  domains.forEach((d,i)=>{ const chip=document.createElement('span'); chip.className='chip'; chip.textContent=d; chip.title=t('title.editChip');
+    chip.ondblclick=()=>{ domains.splice(i,1); input.value=d; renderDomains(); input.focus(); };
+    const x=document.createElement('button'); x.type='button'; x.className='x'; x.textContent='×';
+    x.onclick=()=>{ domains.splice(i,1); renderDomains(); }; chip.appendChild(x); frag.appendChild(chip); });
+  box.insertBefore(frag, input);
+}
+function addDomain(){
+  const input=g('domainInput'); const v=(input.value||'').trim().replace(/[,\s]+$/,'');
+  if(!v){ input.classList.remove('bad'); return; }
+  if(!validDomain(v)){ input.classList.add('bad'); return; }
+  input.classList.remove('bad');
+  if(!domains.some(x=>x.toLowerCase()===v.toLowerCase())) domains.push(v);
+  input.value=''; renderDomains(); input.focus();
+}
 function renderSubnets(){
   const box=g('subnetChips'), input=g('subnetInput'); if(!box||!input) return;
   [...box.querySelectorAll('.chip')].forEach(c=>c.remove());
@@ -685,6 +714,8 @@ async function loadSettings(){
   applyAuthLock();
   document.getElementById('fMode').value = c.mode||'allowlist';
   subnets = (c.directSubnets||[]).slice();
+  domains = (c.directDomains||[]).slice();
+  renderDomains();
   document.getElementById('fKill').checked = !!c.killSwitch;
   document.getElementById('fUdp').checked = !!c.udp;
   document.getElementById('fTray').checked = !!c.showTray;
@@ -742,6 +773,17 @@ g('subnetInput').addEventListener('keydown', e=>{
   else e.target.classList.remove('bad');
 });
 g('subnetInput').addEventListener('blur', addSubnet);
+g('domainInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter'||e.key===','){ e.preventDefault(); addDomain(); }
+  else if(e.key==='Backspace' && !e.target.value && domains.length){ domains.pop(); renderDomains(); }
+  else e.target.classList.remove('bad');
+});
+g('domainInput').addEventListener('blur', addDomain);
+g('domainInput').addEventListener('paste', e=>{
+  const txt=(e.clipboardData||window.clipboardData).getData('text'); if(!/[\s,;]/.test(txt)) return;
+  e.preventDefault(); txt.split(/[\s,;]+/).filter(Boolean).forEach(d=>{ if(validDomain(d) && !domains.some(x=>x.toLowerCase()===d.toLowerCase())) domains.push(d); });
+  renderDomains(); g('domainInput').focus();
+});
 g('subnetInput').addEventListener('paste', e=>{
   const txt=(e.clipboardData||window.clipboardData).getData('text'); if(!/[\s,;]/.test(txt)) return;
   e.preventDefault(); txt.split(/[\s,;]+/).filter(Boolean).forEach(p=>{ if(validCidr(p) && !subnets.some(x=>x.toLowerCase()===p.toLowerCase())) subnets.push(p); });
@@ -752,10 +794,10 @@ function collect(){
     username:document.getElementById('fUser').value, password:document.getElementById('fPass').value, auth:document.getElementById('fAuth').checked,
     mode:document.getElementById('fMode').value, killSwitch:document.getElementById('fKill').checked,
     udp:document.getElementById('fUdp').checked, showTray:document.getElementById('fTray').checked, proxyAll:document.getElementById('fProxyAll').checked,
-    directSubnets:subnets.slice(), apps:apps.slice(),
+    directSubnets:subnets.slice(), directDomains:domains.slice(), apps:apps.slice(),
     cfgUrl:document.getElementById('cfgUrl').value.trim(), cfgInterval:document.getElementById('cfgInterval').value.trim()||'1h', cfgMerge:document.getElementById('cfgMerge').value, cfgProxy:document.getElementById('cfgProxy').value.trim(), cfgSigned:document.getElementById('cfgSigned').checked, cfgPubKey:document.getElementById('cfgPubKey').value.trim() };
 }
-document.getElementById('btnSave').onclick = async ()=>{ const b=document.getElementById('setBanner'); addSubnet(); banner(b,'info',t('msg.saving'));
+document.getElementById('btnSave').onclick = async ()=>{ const b=document.getElementById('setBanner'); addSubnet(); addDomain(); banner(b,'info',t('msg.saving'));
   const r = await call('appSaveConfig', collect()); banner(b, r.ok?'ok':'err', r.message); refreshState(); };
 document.getElementById('btnTest2').onclick = ()=>testProxy(document.getElementById('setBanner'), true);
 

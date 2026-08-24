@@ -33,6 +33,22 @@ type Config struct {
 	// 172.16.0.0/16. Private ranges are already direct via ip_is_private; this
 	// is for arbitrary user-chosen subnets (most useful in greedy mode).
 	DirectSubnets []string `yaml:"direct_subnets"`
+	// DirectDomains are names that must never go through the proxy — the
+	// name-space counterpart of DirectSubnets. Each entry does two things: the
+	// name is exempt from fake-ip (so the app connects to its real address) and
+	// the connection is routed direct even for a proxied app.
+	//
+	// Both halves are needed. With a fake-ip the connection carries the NAME, so
+	// an IP rule (DirectSubnets, ip_is_private) cannot match it — a destination
+	// can only be exempted by name. Use this for intranet names that must resolve
+	// and route on the local network, and for endpoints that refuse the proxy's
+	// egress IP while working fine directly.
+	//
+	// A leading dot matches subdomains only (".corp.local"); a bare name matches
+	// itself and everything under it ("agent-gw.example.com"). Absent (nil) = the
+	// built-in defaults (see DefaultDirectDomains); an explicit empty list
+	// disables them.
+	DirectDomains []string `yaml:"direct_domains"`
 	// BypassCIDRs are destination ranges kept OUT of the TUN entirely: they are
 	// emitted as the TUN's route-exclusions, so the OS installs more-specific
 	// routes that win over SocksIt's default route (longest-prefix match beats /0
@@ -234,11 +250,23 @@ var DefaultBypassCIDRs = []string{
 	"255.255.255.255/32",
 }
 
-// DefaultDirectDomains are name suffixes that must resolve for real instead of
-// getting a fake-ip: mDNS and intranet names, whose real address decides how
-// they are routed (LAN stays LAN). Add your corporate suffix here if internal
-// hosts are reached by name and must not go through the proxy.
-var DefaultDirectDomains = []string{".local", ".lan", ".internal", ".home.arpa"}
+// DefaultDirectDomains are the names kept off the proxy out of the box: mDNS and
+// intranet suffixes, whose real address decides how they are routed (LAN stays
+// LAN), plus Windows' connectivity probes. The probes are here because fake-ip is
+// handed out machine-wide: NCSI compares the answer for dns.msftncsi.com against
+// a fixed address, so a synthetic one makes Windows doubt the connection and can
+// flip it into "no internet"/captive-portal mode. Add your corporate suffix here
+// if internal hosts are reached by name.
+// legacyDefaultDirectDomains is the list the first build of this feature shipped,
+// before fake-ip went machine-wide made Windows' probes matter. That build wrote
+// it into socksit.yaml verbatim, so a config carrying exactly this set is
+// machine-written rather than a deliberate choice — see applyDefaults.
+var legacyDefaultDirectDomains = []string{".local", ".lan", ".internal", ".home.arpa"}
+
+var DefaultDirectDomains = []string{
+	".local", ".lan", ".internal", ".home.arpa",
+	".msftncsi.com", ".msftconnecttest.com",
+}
 
 // DNS carries the fake-ip range for the (IPv4-only) datapath.
 type DNS struct {
@@ -255,8 +283,10 @@ type DNS struct {
 	//
 	// Turning it off restores the old per-process DNS rules.
 	FakeIPAll *bool `yaml:"fakeip_all"`
-	// DirectDomains are suffixes exempt from fake-ip (see DefaultDirectDomains).
-	DirectDomains []string `yaml:"direct_domains"`
+	// LegacyDirectDomains is the pre-release home of the top-level DirectDomains
+	// key (it turned out to govern routing as much as DNS). Still read so a config
+	// written by that build keeps its setting; migrated on load and never emitted.
+	LegacyDirectDomains []string `yaml:"direct_domains,omitempty"`
 	// FakeIPv6 is deprecated: the datapath is IPv4-only (the TUN has no v6
 	// address, so v6 stays native). Still accepted so old files parse, but it is
 	// cleared on load and never used or re-emitted.
@@ -291,11 +321,12 @@ func Default() *Config {
 		// Loopback and private (RFC 1918) ranges bypass the proxy by default —
 		// loopback and LAN traffic should stay direct out of the box.
 		DirectSubnets: []string{"127.0.0.1/32", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"},
+		DirectDomains: append([]string(nil), DefaultDirectDomains...),
 		BypassCIDRs:   append([]string(nil), DefaultBypassCIDRs...),
 		Mode:          ModeAllowlist,
 		KillSwitch:    &on,
 		ShowTray:      &tray,
-		DNS:           DNS{FakeIPv4: DefaultFakeIPv4, DirectDomains: append([]string(nil), DefaultDirectDomains...)},
+		DNS:           DNS{FakeIPv4: DefaultFakeIPv4},
 		Control:       Control{ClashAPI: "127.0.0.1:9797"},
 		Log:           Log{Level: "warn"},
 		Update: Update{
@@ -521,13 +552,26 @@ func (c *Config) ShowTrayEnabled() bool { return c.ShowTray == nil || *c.ShowTra
 // FakeIPForAll reports whether every lookup gets a fake-ip (default true).
 func (c *Config) FakeIPForAll() bool { return c.DNS.FakeIPAll == nil || *c.DNS.FakeIPAll }
 
-// EffectiveDirectDomains is the configured fake-ip exemption list, or the
+// ValidDomainEntry rejects input that cannot work as a name match: a CIDR, URL
+// or wildcard pattern typed into direct_domains would silently match nothing.
+func ValidDomainEntry(s string) error {
+	e := strings.TrimSpace(s)
+	if e == "" {
+		return nil // blank entries are dropped, not an error
+	}
+	if strings.ContainsAny(e, " 	/:*?,") || strings.Contains(e, "..") {
+		return fmt.Errorf("invalid name %q (expected e.g. agent-gw.example.com or .corp.local — no scheme, mask or wildcard)", s)
+	}
+	return nil
+}
+
+// EffectiveDirectDomains is the configured never-proxied name list, or the
 // built-in defaults when the key is absent. An explicit empty list exempts none.
 func (c *Config) EffectiveDirectDomains() []string {
-	if c.DNS.DirectDomains == nil {
+	if c.DirectDomains == nil {
 		return append([]string(nil), DefaultDirectDomains...)
 	}
-	return trimNonEmpty(c.DNS.DirectDomains)
+	return trimNonEmpty(c.DirectDomains)
 }
 
 // ProxyAllOn reports whether every application is proxied, ignoring the app
@@ -550,8 +594,20 @@ func (c *Config) applyDefaults() {
 	if c.Proxy.Port == 0 {
 		c.Proxy.Port = d.Proxy.Port
 	}
-	if c.DNS.DirectDomains == nil {
-		c.DNS.DirectDomains = append([]string(nil), DefaultDirectDomains...)
+	// dns.direct_domains -> direct_domains: adopt the old key rather than silently
+	// dropping a setting, then stop emitting it.
+	if c.DirectDomains == nil && c.DNS.LegacyDirectDomains != nil {
+		c.DirectDomains = c.DNS.LegacyDirectDomains
+	}
+	c.DNS.LegacyDirectDomains = nil
+	if c.DirectDomains == nil {
+		c.DirectDomains = append([]string(nil), DefaultDirectDomains...)
+	} else if sameCIDRSet(c.DirectDomains, legacyDefaultDirectDomains) {
+		// Written by the build that shipped the first version of this list, not
+		// chosen by anyone: bring it up to the current defaults so the Windows
+		// connectivity probes stop getting a fake-ip. A list edited by hand differs
+		// from that set and is left alone.
+		c.DirectDomains = append([]string(nil), DefaultDirectDomains...)
 	}
 	// bypass_cidrs: absent = built-in defaults; an explicit empty list is honoured
 	// (the user disabled them), so only nil is backfilled.
@@ -634,6 +690,11 @@ func (c *Config) Validate() error {
 	for _, sn := range c.ManagedSubnets {
 		if _, _, err := net.ParseCIDR(strings.TrimSpace(sn)); err != nil {
 			return fmt.Errorf("managed_subnets: invalid CIDR %q: %w", sn, err)
+		}
+	}
+	for _, d := range c.DirectDomains {
+		if err := ValidDomainEntry(d); err != nil {
+			return fmt.Errorf("direct_domains: %w", err)
 		}
 	}
 	for _, sn := range c.BypassCIDRs {

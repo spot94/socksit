@@ -98,8 +98,9 @@ func Generate(c *config.Config) (*Config, error) {
 	// 1. Names that must resolve for real: mDNS/intranet suffixes (their true
 	// address decides routing, so a fake-ip would send LAN traffic the wrong way)
 	// and the proxy's own hostname (never dial the proxy through a fake address).
-	if dd := trimAll(c.EffectiveDirectDomains()); len(dd) > 0 {
-		out.DNS.Rules = append(out.DNS.Rules, DNSRule{DomainSuffix: dd, Action: "route", Server: tagLocal})
+	directExact, directSuffix := splitDomainMatch(c.EffectiveDirectDomains())
+	if len(directExact)+len(directSuffix) > 0 {
+		out.DNS.Rules = append(out.DNS.Rules, DNSRule{Domain: directExact, DomainSuffix: directSuffix, Action: "route", Server: tagLocal})
 	}
 	if addr := strings.TrimSpace(c.Proxy.Address); addr != "" && net.ParseIP(addr) == nil {
 		out.DNS.Rules = append(out.DNS.Rules, DNSRule{Domain: []string{addr}, Action: "route", Server: tagLocal})
@@ -148,6 +149,15 @@ func Generate(c *config.Config) (*Config, error) {
 		{Protocol: "dns", Action: "hijack-dns"},
 		antiLoopRule(c.Proxy.Address),
 		{IPIsPrivate: true, Action: "route", Outbound: tagDirect},
+	}
+	// Names that must never be proxied. Exempting them from fake-ip (above) is not
+	// enough on its own: routing is per process, so a proxied app would still send
+	// the (now real) address to the proxy. The domain is recovered from the
+	// connection by the sniff rule above — TLS SNI or the HTTP Host header — which
+	// covers what these exemptions are for; a protocol that cannot be sniffed
+	// still falls back to the app rule, and to DirectSubnets for its address.
+	if len(directExact)+len(directSuffix) > 0 {
+		rules = append(rules, RouteRule{Domain: directExact, DomainSuffix: directSuffix, Action: "route", Outbound: tagDirect})
 	}
 	// Bypass ranges are already excluded from the TUN above; this is the safety
 	// net for anything that still reaches the router (e.g. a socket bound before
@@ -297,6 +307,27 @@ func appNames(apps []string) []string {
 }
 
 // trimAll trims each entry and drops empties.
+// splitDomainMatch turns direct-domain entries into sing-box match fields. An
+// entry with a leading dot is a suffix (".local" — subdomains only); a bare name
+// matches itself AND everything under it, which is what someone typing
+// "agent-gw.kimi.com" means. The dot is added explicitly because sing-box
+// domain_suffix is a literal string suffix: bare "kimi.com" would also match
+// "notkimi.com".
+func splitDomainMatch(entries []string) (exact, suffix []string) {
+	for _, e := range trimAll(entries) {
+		e = strings.ToLower(strings.TrimSuffix(e, "."))
+		switch {
+		case e == "":
+		case strings.HasPrefix(e, "."):
+			suffix = append(suffix, e)
+		default:
+			exact = append(exact, e)
+			suffix = append(suffix, "."+e)
+		}
+	}
+	return exact, suffix
+}
+
 func trimAll(in []string) []string {
 	var out []string
 	for _, s := range in {
