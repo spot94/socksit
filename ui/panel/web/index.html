@@ -117,6 +117,39 @@
   .switch.locked{opacity:.8;cursor:not-allowed}
   .lockbadge{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:1px 6px}
 
+  /* option list: a radio with the consequence spelled out under it, so the choice
+     does not depend on knowing what "allowlist" means */
+  .opts{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+  .opt{display:flex;gap:11px;align-items:flex-start;padding:9px 11px;border:1px solid transparent;border-radius:9px;cursor:pointer}
+  .opt:hover{background:var(--panel-2)}
+  .opt.sel{background:var(--accent-weak);border-color:var(--accent)}
+  .opt input{display:none}
+  .opt .mark{width:17px;height:17px;flex:0 0 auto;margin-top:1px;border-radius:50%;border:1.5px solid var(--border);background:var(--panel-2);position:relative}
+  .opt.sel .mark{border-color:var(--accent)}
+  .opt.sel .mark::after{content:"";position:absolute;inset:3.5px;border-radius:50%;background:var(--accent)}
+  .opt .txt b{font-weight:500}
+  .opt.disabled{opacity:.5;cursor:not-allowed}
+  /* a switch with its consequence, hint aligned under the label text */
+  .swlist{display:flex;flex-direction:column;gap:11px;margin-top:8px}
+  .swrow .sub{margin-left:54px}
+  .hr{height:1px;background:var(--border);margin:13px -14px}
+  .fld .sub{text-transform:none;letter-spacing:0}
+  #appBlock.off{opacity:.45}
+  /* advanced block: closed unless it is actually in use */
+  details.adv{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);margin-top:10px}
+  details.adv>summary{cursor:pointer;padding:12px 14px;font-size:11px;color:var(--muted);font-weight:500;
+    text-transform:uppercase;letter-spacing:.07em;display:flex;align-items:center;gap:9px;list-style:none}
+  details.adv>summary::-webkit-details-marker{display:none}
+  details.adv>summary::before{content:"▸";font-size:11px;line-height:1;transition:transform .15s}
+  details.adv[open]>summary::before{transform:rotate(90deg)}
+  details.adv>summary:hover{color:var(--text)}
+  details.adv>summary .state{margin-left:auto;text-transform:none;letter-spacing:0;font-size:12px}
+  details.adv .body{padding:0 14px 14px}
+  /* the save button follows the scroll: settings are taller than the window */
+  .actionbar{position:sticky;bottom:0;z-index:2;display:flex;gap:10px;align-items:center;
+    margin:12px -24px 0;padding:12px 24px;background:var(--bg);border-top:1px solid var(--border);
+    /* also paint over the scroll container's bottom padding, or rows show under the bar */
+    box-shadow:0 20px 0 var(--bg)}
   .banner{border-radius:9px;padding:10px 13px;font-size:13px;margin-top:12px;display:none;white-space:pre-line}
   .banner.show{display:block}
   .banner.ok{background:#1a9c5318;color:var(--ok);border:1px solid #1a9c5340}
@@ -132,7 +165,9 @@
   .applist .x{border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0 4px}
   .applist .x:hover{color:var(--bad)}
   /* chip editor (bypass subnets) */
-  .chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:6px 8px;min-height:38px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:6px 8px;min-height:38px;
+    /* the editor sits inside a .fld label, whose uppercase must not reach the values */
+    text-transform:none;letter-spacing:0}
   .chips:focus-within{border-color:var(--accent)}
   .chip{display:inline-flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--border);border-radius:7px;padding:3px 6px 3px 9px;font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
   .chip .x{border:none;background:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0 1px}
@@ -239,67 +274,102 @@
     <!-- SETTINGS -->
     <section class="section" id="s-settings">
       <div class="card">
-        <div class="form">
+        <h3 data-i18n="h.connection">Connection</h3>
+        <div class="sub muted" data-i18n="hint.connection">Where SocksIt hands off the traffic of proxied applications.</div>
+        <div class="form" style="margin-top:9px">
           <label class="fld"><span data-i18n="lbl.address">Proxy address</span><input type="text" id="fAddress" data-i18n-ph="ph.address"></label>
           <label class="fld"><span data-i18n="lbl.port">Port</span><input type="number" id="fPort" min="1" max="65535" placeholder="1080"></label>
           <div class="wide"><label class="switch"><input type="checkbox" id="fAuth"><span class="track"></span><span data-i18n="lbl.auth">Authentication</span></label></div>
-          <label class="fld"><span data-i18n="lbl.username">Username</span> <span class="muted" data-i18n="note.passBlank">(blank = keep)</span><input type="text" id="fUser" data-i18n-ph="ph.keep"></label>
-          <label class="fld"><span data-i18n="lbl.password">Password</span> <span class="muted" data-i18n="note.passBlank">(blank = keep)</span><input type="password" id="fPass" data-i18n-ph="ph.keep"></label>
-          <label class="fld"><span data-i18n="lbl.mode">Mode</span><select id="fMode"><option value="allowlist" data-i18n="opt.allowlist">allowlist — only listed apps</option><option value="blocklist" data-i18n="opt.blocklist">blocklist — all except listed</option></select></label>
-          <label class="fld" for="subnetInput"><span data-i18n="lbl.bypass">Bypass subnets</span><div class="chips" id="subnetChips"><input type="text" id="subnetInput" class="chipinput" data-i18n-ph="ph.subnet"></div></label>
-          <label class="fld" for="domainInput"><span data-i18n="lbl.directDomains">Direct names</span> <span class="muted" data-i18n="note.directDomains">(never via the proxy)</span><div class="chips" id="domainChips"><input type="text" id="domainInput" class="chipinput" data-i18n-ph="ph.domain"></div></label>
-          <div class="wide row" style="gap:22px">
+          <label class="fld creds"><span data-i18n="lbl.username">Username</span> <span class="muted" data-i18n="note.passBlank">(blank = keep)</span><input type="text" id="fUser" data-i18n-ph="ph.keep"></label>
+          <label class="fld creds"><span data-i18n="lbl.password">Password</span> <span class="muted" data-i18n="note.passBlank">(blank = keep)</span><input type="password" id="fPass" data-i18n-ph="ph.keep"></label>
+        </div>
+        <div class="row" style="margin-top:10px"><div class="spacer"></div><button id="btnTest2" data-i18n="btn.test">Test proxy</button></div>
+      </div>
+
+      <div class="card" style="margin-top:10px">
+        <h3 data-i18n="h.whatProxy">What to proxy</h3>
+        <div class="opts" id="policyOpts">
+          <label class="opt" data-pol="allowlist"><input type="radio" name="pmode" value="allowlist"><span class="mark"></span>
+            <span class="txt"><b data-i18n="pol.allow">Only the applications listed below</b><div class="sub muted" data-i18n="pol.allowSub">Everything else goes direct.</div></span></label>
+          <label class="opt" data-pol="blocklist"><input type="radio" name="pmode" value="blocklist"><span class="mark"></span>
+            <span class="txt"><b data-i18n="pol.block">Everything except the applications listed below</b><div class="sub muted" data-i18n="pol.blockSub">The list becomes the exception: those applications go direct.</div></span></label>
+          <label class="opt" data-pol="all"><input type="radio" name="pmode" value="all"><span class="mark"></span>
+            <span class="txt"><b data-i18n="pol.all">All traffic</b><div class="sub muted" data-i18n="pol.allSub">The application list is ignored. Direct names and subnets still apply. Local setting: a managed config cannot switch it on.</div></span></label>
+        </div>
+
+        <div class="hr"></div>
+        <div id="appBlock">
+          <h3 data-i18n="h.proxiedApps">Proxied applications</h3>
+          <div class="row" style="margin-top:8px">
+            <input type="text" id="fApp" list="procList" data-i18n-ph="ph.app" style="flex:1;min-width:200px">
+            <datalist id="procList"></datalist>
+            <button id="btnBrowse" data-i18n="btn.browse">Browse…</button>
+            <button id="btnAddApp" data-i18n="btn.add">Add</button>
+            <button id="btnReloadProc" data-i18n-title="title.reloadProc">↻</button>
+          </div>
+          <ul class="applist" id="appList"></ul>
+          <div class="sub muted" style="margin-top:8px" data-i18n="hint.apps">Exact .exe name (any folder) or a full path. For web apps add the browser (chrome.exe / msedge.exe).</div>
+        </div>
+
+        <div class="hr"></div>
+        <h3 data-i18n="h.exceptions">Exceptions — never through the proxy</h3>
+        <div class="form" style="margin-top:8px">
+          <label class="fld" for="domainInput"><span data-i18n="lbl.directDomains">Direct names</span><div class="chips" id="domainChips"><input type="text" id="domainInput" class="chipinput" data-i18n-ph="ph.domain"></div>
+            <span class="sub muted" data-i18n="hint.directDomains">By name. For an endpoint that refuses the proxy address, and for intranet hosts reached by name.</span></label>
+          <label class="fld" for="subnetInput"><span data-i18n="lbl.bypass">Direct subnets</span><div class="chips" id="subnetChips"><input type="text" id="subnetInput" class="chipinput" data-i18n-ph="ph.subnet"></div>
+            <span class="sub muted" data-i18n="hint.subnets">By address. Matches connections opened to an IP; one opened by name is matched by the names on the left.</span></label>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:10px">
+        <h3 data-i18n="h.behaviour">Behaviour</h3>
+        <div class="swlist">
+          <div class="swrow">
             <label class="switch" id="killSw"><input type="checkbox" id="fKill"><span class="track"></span><span data-i18n="sw.killswitch">Kill-switch</span><span class="lockbadge" id="killLock" style="display:none" data-i18n="cfg.managedTag">managed</span></label>
+            <div class="sub muted" data-i18n="hint.killswitch">If the tunnel drops, cut the proxied applications off instead of letting them out directly.</div>
+          </div>
+          <div class="swrow">
             <label class="switch" id="udpSw"><input type="checkbox" id="fUdp"><span class="track"></span><span data-i18n="sw.udp">Proxy UDP</span><span class="lockbadge" id="udpLock" style="display:none" data-i18n="cfg.managedTag">managed</span></label>
+            <div class="sub muted" data-i18n="hint.udp">Send UDP through the proxy as well. Turn off if the proxy has no UDP support.</div>
+          </div>
+          <div class="swrow">
             <label class="switch"><input type="checkbox" id="fTray"><span class="track"></span><span data-i18n="sw.tray">Show in tray</span></label>
-            <label class="switch"><input type="checkbox" id="fProxyAll"><span class="track"></span><span data-i18n="sw.proxyAll">Proxy all traffic</span></label>
+            <div class="sub muted" data-i18n="hint.tray">Keep the icon next to the clock while the service is installed.</div>
           </div>
         </div>
       </div>
 
-      <div class="card" style="margin-top:10px">
-        <h3 data-i18n="h.proxiedApps">Proxied applications</h3>
-        <div class="row" style="margin-top:8px">
-          <input type="text" id="fApp" list="procList" data-i18n-ph="ph.app" style="flex:1;min-width:200px">
-          <datalist id="procList"></datalist>
-          <button id="btnBrowse" data-i18n="btn.browse">Browse…</button>
-          <button id="btnAddApp" data-i18n="btn.add">Add</button>
-          <button id="btnReloadProc" data-i18n-title="title.reloadProc">↻</button>
+      <details class="adv" id="cfgAdv">
+        <summary><span data-i18n="cfg.title">Config source</span><span class="state muted" id="cfgSummary"></span></summary>
+        <div class="body">
+          <div id="keyRotBanner" style="display:none;border:1px solid var(--warn);background:#c47d0018;border-radius:9px;padding:10px 13px;margin:0 0 10px">
+            <div style="font-weight:600;color:var(--warn)" data-i18n="cfg.rotate.title">Key rotation requested</div>
+            <div class="sub" style="margin-top:2px" data-i18n="cfg.rotate.msg">The config server asks to change the trusted key.</div>
+            <div class="mono" id="keyRotKey" style="margin:8px 0;word-break:break-all;font-size:12px"></div>
+            <div class="row"><button class="primary" id="btnAcceptKey" data-i18n="cfg.rotate.accept">Accept new key</button><button id="btnDeclineKey" data-i18n="cfg.rotate.decline">Decline</button></div>
+          </div>
+          <div class="sub muted" data-i18n="cfg.hint">When set, the config is pulled from this URL and applied automatically.</div>
+          <div class="form" style="margin-top:9px">
+            <label class="fld wide"><span data-i18n="cfg.url">Config URL</span><input type="text" id="cfgUrl" data-i18n-ph="cfg.urlPh"></label>
+            <label class="fld"><span data-i18n="cfg.interval">Refresh interval</span><input type="text" id="cfgInterval" placeholder="1h"></label>
+            <label class="fld"><span data-i18n="cfg.merge">On update</span><select id="cfgMerge"><option value="replace" data-i18n="cfg.merge.replace">Replace config</option><option value="override" data-i18n="cfg.merge.override">Override fields</option></select></label>
+            <label class="fld"><span data-i18n="cfg.proxy">Feed proxy</span><select id="cfgProxy">
+              <option value="" data-i18n="proxymode.direct">Direct</option>
+              <option value="system" data-i18n="proxymode.system">System proxy</option>
+              <option value="use-socks" data-i18n="proxymode.socks">Through the SOCKS proxy</option></select></label>
+            <label class="switch" style="align-self:end;height:38px"><input type="checkbox" id="cfgSigned"><span class="track"></span><span data-i18n="cfg.signed">Require signature</span></label>
+            <label class="fld wide"><span data-i18n="cfg.pubkey">Trusted key (base64)</span><input type="text" id="cfgPubKey" class="mono" data-i18n-ph="cfg.pubkeyPh"></label>
+          </div>
+          <div class="sub muted" id="cfgMergeHint" style="margin-top:8px" data-i18n="cfg.mergeHint">Replace or override.</div>
+          <div class="row" style="margin-top:10px">
+            <button id="btnCfgFetch" data-i18n="cfg.fetch">Fetch now</button>
+            <span class="muted" id="cfgStatus"></span>
+          </div>
         </div>
-        <ul class="applist" id="appList"></ul>
-        <div class="sub muted" style="margin-top:8px" data-i18n="hint.apps">Exact .exe name (any folder) or a full path. For web apps add the browser (chrome.exe / msedge.exe).</div>
-      </div>
+      </details>
 
-      <div class="card" style="margin-top:10px">
-        <h3 data-i18n="cfg.title">Config source (optional)</h3>
-        <div id="keyRotBanner" style="display:none;border:1px solid var(--warn);background:#c47d0018;border-radius:9px;padding:10px 13px;margin:8px 0">
-          <div style="font-weight:600;color:var(--warn)" data-i18n="cfg.rotate.title">Key rotation requested</div>
-          <div class="sub" style="margin-top:2px" data-i18n="cfg.rotate.msg">The config server asks to change the trusted key. Accepting moves the root of trust — only accept if you initiated this rotation.</div>
-          <div class="mono" id="keyRotKey" style="margin:8px 0;word-break:break-all;font-size:12px"></div>
-          <div class="row"><button class="primary" id="btnAcceptKey" data-i18n="cfg.rotate.accept">Accept new key</button><button id="btnDeclineKey" data-i18n="cfg.rotate.decline">Decline</button></div>
-        </div>
-        <div class="form" style="margin-top:8px">
-          <label class="fld wide"><span data-i18n="cfg.url">Config URL</span><input type="text" id="cfgUrl" data-i18n-ph="cfg.urlPh"></label>
-          <label class="fld"><span data-i18n="cfg.interval">Refresh interval</span><input type="text" id="cfgInterval" placeholder="1h"></label>
-          <label class="fld"><span data-i18n="cfg.merge">On update</span><select id="cfgMerge"><option value="replace" data-i18n="cfg.merge.replace">Replace config</option><option value="override" data-i18n="cfg.merge.override">Override fields</option></select></label>
-          <label class="fld"><span data-i18n="cfg.proxy">Feed proxy</span><select id="cfgProxy">
-            <option value="" data-i18n="proxymode.direct">Direct</option>
-            <option value="system" data-i18n="proxymode.system">System proxy</option>
-            <option value="use-socks" data-i18n="proxymode.socks">Through the SOCKS proxy</option></select></label>
-          <label class="switch" style="align-self:end;height:38px"><input type="checkbox" id="cfgSigned"><span class="track"></span><span data-i18n="cfg.signed">Require signature</span></label>
-          <label class="fld wide"><span data-i18n="cfg.pubkey">Trusted key (base64)</span><input type="text" id="cfgPubKey" class="mono" data-i18n-ph="cfg.pubkeyPh"></label>
-        </div>
-        <div class="sub muted" id="cfgMergeHint" style="margin-top:8px" data-i18n="cfg.mergeHint">Replace: the whole local config is swapped for the remote one. Override: only the fields the remote specifies change; your other settings and your own apps are kept.</div>
-        <div class="row" style="margin-top:10px">
-          <button id="btnCfgFetch" data-i18n="cfg.fetch">Fetch now</button>
-          <span class="muted" id="cfgStatus"></span>
-        </div>
-        <div class="sub muted" style="margin-top:8px" data-i18n="cfg.hint">When set, the config is pulled from this URL and applied automatically.</div>
-      </div>
-
-      <div class="row" style="margin-top:10px">
+      <div class="actionbar">
         <button class="primary" id="btnSave" data-i18n="btn.save">Save &amp; apply</button>
-        <button id="btnTest2" data-i18n="btn.test">Test proxy</button>
       </div>
       <div class="banner" id="setBanner"></div>
     </section>
@@ -405,12 +475,21 @@ const I18N = {
     'mode.allowlist':'allowlist','mode.blocklist':'blocklist',
     'lbl.address':'Proxy address','ph.address':'10.0.0.1 or proxy.host','lbl.port':'Port',
     'lbl.auth':'Authentication','lbl.username':'Username','note.userBlank':'(blank = keep/none)','lbl.password':'Password','note.passBlank':'(blank = keep)','ph.keep':'leave blank to keep current',
-    'lbl.mode':'Mode','opt.allowlist':'allowlist — only listed apps','opt.blocklist':'blocklist — all except listed',
-    'lbl.bypass':'Bypass subnets','sw.killswitch':'Kill-switch','sw.udp':'Proxy UDP','sw.tray':'Show in tray',
+    'h.connection':'Connection','hint.connection':'Where SocksIt hands off the traffic of proxied applications.',
+    'h.whatProxy':'What to proxy','h.exceptions':'Exceptions — never through the proxy','h.behaviour':'Behaviour',
+    'pol.allow':'Only the applications listed below','pol.allowSub':'Everything else goes direct.',
+    'pol.block':'Everything except the applications listed below','pol.blockSub':'The list becomes the exception: those applications go direct.',
+    'pol.all':'All traffic','pol.allSub':'The application list is ignored. Direct names and subnets still apply. Local setting: a managed config cannot switch it on.',
+    'hint.directDomains':'By name. For an endpoint that refuses the proxy address, and for intranet hosts reached by name.',
+    'hint.subnets':'By address. Matches connections opened to an IP; one opened by name is matched by the names on the left.',
+    'hint.killswitch':'If the tunnel drops, cut the proxied applications off instead of letting them out directly.',
+    'hint.udp':'Send UDP through the proxy as well. Turn off if the proxy has no UDP support.',
+    'hint.tray':'Keep the icon next to the clock while the service is installed.','cfg.state.off':'not configured',
+    'lbl.bypass':'Direct subnets','sw.killswitch':'Kill-switch','sw.udp':'Proxy UDP','sw.tray':'Show in tray',
     'h.proxiedApps':'Proxied applications','ph.app':'app.exe or full path','btn.browse':'Browse…','btn.add':'Add','title.reloadProc':'Refresh running processes',
     'hint.apps':'Exact .exe name (any folder) or a full path. For web apps add the browser (chrome.exe / msedge.exe).','btn.save':'Save & apply',
     'msg.noApps':'No apps yet.','title.remove':'Remove','ph.subnet':'add subnet (Enter)','title.editChip':'Double-click to edit',
-    'lbl.directDomains':'Direct names','note.directDomains':'(never via the proxy)','ph.domain':'add name (Enter)',
+    'lbl.directDomains':'Direct names','ph.domain':'add name (Enter)',
     'ph.filter':'filter…','sw.auto':'Auto','btn.refresh':'Refresh',
     'th.process':'Process','th.destination':'Destination','th.net':'Net','th.via':'Via','th.up':'Up','th.down':'Down',
     'stat.noData':'No data yet — click Refresh.','stat.noMatch':'No matching connections.',
@@ -427,10 +506,10 @@ const I18N = {
     'chart.title':'Traffic','chart.total':'Total (through the tunnel)','chart.proxied':'Through the proxy',
     'chart.hint':'Throughput over the last 5 minutes, sampled every 2s. History is kept while this window is open.',
     'chart.now':'now: ↑{u} ↓{d} · proxy ↑{pu} ↓{pd}',
-    'sw.proxyAll':'Proxy all traffic','hint.proxyAll':'All traffic goes through the proxy and the application list is ignored (bypass ranges and direct subnets still apply).',
+    
     'ph.colFilter':'filter…','btn.clearFilters':'Clear filters',
     'upd.save':'Save','upd.check':'Check now','upd.apply':'Apply update','upd.applying':'Downloading and applying…','upd.restarting':'Update installed — restarting the panel…','upd.upToDate':'Up to date (v{v})','upd.available':'Update available: v{v}','upd.checking':'Checking…','upd.hint':'Trust is verified by signature — the source/CDN is untrusted.',
-    'cfg.title':'Config source (optional)','cfg.url':'Config URL','cfg.urlPh':'https://…/socksit.yaml — empty = local config','cfg.interval':'Refresh interval','cfg.merge':'On update','cfg.merge.replace':'Replace config','cfg.merge.override':'Override fields','cfg.proxy':'Feed proxy','cfg.proxyPh':'empty = direct · system · use-socks · socks5://host:port','cfg.mergeHint':'Replace: the whole local config is swapped for the remote one. Override: only the fields the remote specifies change; your other settings are kept, and the proxied apps are the remote list plus your own.','cfg.managedApps':'Also proxied, from the managed config:','cfg.managedTag':'managed','cfg.managedSubnets':'Also direct, from the managed config:','cfg.rotate.title':'Key rotation requested','cfg.rotate.msg':'The config server asks to change the trusted key. Accepting moves the root of trust — only accept if you initiated this rotation.','cfg.rotate.accept':'Accept new key','cfg.rotate.decline':'Decline','cfg.rotate.confirm':'Change the trusted key to the proposed one? Only accept if you initiated this.','cfg.signed':'Require signature','cfg.pubkey':'Trusted key (base64)','cfg.pubkeyPh':'Ed25519 public key from `mksign genkey`','cfg.fetch':'Fetch now','cfg.fetching':'Fetching…','cfg.local':'Using the local config.','cfg.fetched':'Last fetched {t}','cfg.changed':' (updated)','cfg.hint':'When set, the config is pulled from this URL and applied automatically (on start and on the interval); local edits are overwritten on refresh. A signed feed (recommended) needs a matching <url>.sig verified with YOUR Trusted key — generate a keypair with `mksign genkey`, put the public half here, sign configs with the private half.'
+    'cfg.title':'Config from a server','cfg.url':'Config URL','cfg.urlPh':'https://…/socksit.yaml — empty = local config','cfg.interval':'Refresh interval','cfg.merge':'On update','cfg.merge.replace':'Replace config','cfg.merge.override':'Override fields','cfg.proxy':'Feed proxy','cfg.proxyPh':'empty = direct · system · use-socks · socks5://host:port','cfg.mergeHint':'Replace: the whole local config is swapped for the remote one. Override: only the fields the remote specifies change; your other settings are kept, and the proxied apps are the remote list plus your own.','cfg.managedApps':'Also proxied, from the managed config:','cfg.managedTag':'managed','cfg.managedSubnets':'Also direct, from the managed config:','cfg.rotate.title':'Key rotation requested','cfg.rotate.msg':'The config server asks to change the trusted key. Accepting moves the root of trust — only accept if you initiated this rotation.','cfg.rotate.accept':'Accept new key','cfg.rotate.decline':'Decline','cfg.rotate.confirm':'Change the trusted key to the proposed one? Only accept if you initiated this.','cfg.signed':'Require signature','cfg.pubkey':'Trusted key (base64)','cfg.pubkeyPh':'Ed25519 public key from `mksign genkey`','cfg.fetch':'Fetch now','cfg.fetching':'Fetching…','cfg.local':'Using the local config.','cfg.fetched':'Last fetched {t}','cfg.changed':' (updated)','cfg.hint':'When set, the config is pulled from this URL and applied automatically (on start and on the interval); local edits are overwritten on refresh. A signed feed (recommended) needs a matching <url>.sig verified with YOUR Trusted key — generate a keypair with `mksign genkey`, put the public half here, sign configs with the private half.'
   },
   ru: {
     'nav.dashboard':'Обзор','nav.settings':'Настройки','nav.statistics':'Статистика','nav.logs':'Логи','nav.diagnostics':'Диагностика','nav.about':'О программе',
@@ -445,12 +524,21 @@ const I18N = {
     'mode.allowlist':'allowlist','mode.blocklist':'blocklist',
     'lbl.address':'Адрес прокси','ph.address':'10.0.0.1 или proxy.host','lbl.port':'Порт',
     'lbl.auth':'Авторизация','lbl.username':'Логин','note.userBlank':'(пусто = не менять/без авторизации)','lbl.password':'Пароль','note.passBlank':'(пусто = не менять)','ph.keep':'пусто — оставить текущий',
-    'lbl.mode':'Режим','opt.allowlist':'allowlist — только выбранные','opt.blocklist':'blocklist — все, кроме выбранных',
+    'h.connection':'Подключение','hint.connection':'Куда SocksIt отдаёт трафик проксируемых приложений.',
+    'h.whatProxy':'Что проксировать','h.exceptions':'Исключения — никогда через прокси','h.behaviour':'Поведение',
+    'pol.allow':'Только приложения из списка ниже','pol.allowSub':'Всё остальное идёт напрямую.',
+    'pol.block':'Всё, кроме приложений из списка ниже','pol.blockSub':'Список становится исключением: перечисленные приложения идут напрямую.',
+    'pol.all':'Весь трафик','pol.allSub':'Список приложений игнорируется. Прямые домены и подсети продолжают действовать. Настройка локальная: с сервера её включить нельзя.',
+    'hint.directDomains':'По имени. Для эндпоинта, который не принимает адрес прокси, и для внутренних узлов, к которым обращаются по имени.',
+    'hint.subnets':'По адресу. Срабатывает для соединений, открытых на IP; открытое по имени ловится списком слева.',
+    'hint.killswitch':'При обрыве туннеля резать проксируемые приложения, а не выпускать их напрямую.',
+    'hint.udp':'Отправлять через прокси и UDP. Выключите, если прокси не умеет UDP.',
+    'hint.tray':'Держать значок у часов, пока служба установлена.','cfg.state.off':'не настроен',
     'lbl.bypass':'Прямые подсети','sw.killswitch':'Kill-switch','sw.udp':'Проксировать UDP','sw.tray':'Значок в трее',
     'h.proxiedApps':'Проксируемые приложения','ph.app':'app.exe или полный путь','btn.browse':'Обзор…','btn.add':'Добавить','title.reloadProc':'Обновить список процессов',
     'hint.apps':'Точное имя .exe (в любой папке) или полный путь. Для веб-приложений добавьте браузер (chrome.exe / msedge.exe).','btn.save':'Сохранить и применить',
     'msg.noApps':'Пока нет приложений.','title.remove':'Удалить','ph.subnet':'подсеть + Enter','title.editChip':'Двойной клик — редактировать',
-    'lbl.directDomains':'Прямые домены','note.directDomains':'(никогда через прокси)','ph.domain':'домен + Enter',
+    'lbl.directDomains':'Прямые домены','ph.domain':'домен + Enter',
     'ph.filter':'фильтр…','sw.auto':'Авто','btn.refresh':'Обновить',
     'th.process':'Процесс','th.destination':'Назначение','th.net':'Сеть','th.via':'Через','th.up':'Отпр.','th.down':'Получ.',
     'stat.noData':'Пока нет данных — нажмите «Обновить».','stat.noMatch':'Нет подходящих соединений.',
@@ -467,10 +555,10 @@ const I18N = {
     'chart.title':'Трафик','chart.total':'Всего (через туннель)','chart.proxied':'Через прокси',
     'chart.hint':'Скорость за последние 5 минут, замер каждые 2 с. История хранится, пока открыто это окно.',
     'chart.now':'сейчас: ↑{u} ↓{d} · прокси ↑{pu} ↓{pd}',
-    'sw.proxyAll':'Проксировать весь трафик','hint.proxyAll':'Весь трафик идёт через прокси, список приложений игнорируется (прямые подсети и bypass по-прежнему действуют).',
+    
     'ph.colFilter':'фильтр…','btn.clearFilters':'Сбросить фильтры',
     'upd.save':'Сохранить','upd.check':'Проверить сейчас','upd.apply':'Установить обновление','upd.applying':'Скачивание и установка…','upd.restarting':'Обновление установлено — перезапуск панели…','upd.upToDate':'Актуальная версия (v{v})','upd.available':'Доступно обновление: v{v}','upd.checking':'Проверка…','upd.hint':'Подлинность проверяется подписью — источник/CDN недоверенный.',
-    'cfg.title':'Источник конфига (опц.)','cfg.url':'URL конфига','cfg.urlPh':'https://…/socksit.yaml — пусто = локальный конфиг','cfg.interval':'Интервал обновления','cfg.merge':'При обновлении','cfg.merge.replace':'Заменять конфиг','cfg.merge.override':'Переопределять поля','cfg.proxy':'Proxy для конфига','cfg.proxyPh':'пусто = напрямую · system · use-socks · socks5://host:port','cfg.mergeHint':'Заменять: локальный конфиг целиком меняется на удалённый. Переопределять: меняются только поля, заданные в удалённом; остальные настройки сохраняются, а список приложений = удалённый плюс твои личные.','cfg.managedApps':'Также проксируются, из управляемого конфига:','cfg.managedTag':'из канала','cfg.managedSubnets':'Также напрямую, из управляемого конфига:','cfg.rotate.title':'Запрос на смену ключа','cfg.rotate.msg':'Сервер конфигурации просит сменить доверенный ключ. Принятие меняет корень доверия — принимай только если ты сам инициировал ротацию.','cfg.rotate.accept':'Принять новый ключ','cfg.rotate.decline':'Отклонить','cfg.rotate.confirm':'Сменить доверенный ключ на предложенный? Принимай только если ты это инициировал.','cfg.signed':'Требовать подпись','cfg.pubkey':'Доверенный ключ (base64)','cfg.pubkeyPh':'публичный Ed25519 из `mksign genkey`','cfg.fetch':'Обновить сейчас','cfg.fetching':'Обновление…','cfg.local':'Используется локальный конфиг.','cfg.fetched':'Обновлено {t}','cfg.changed':' (изменён)','cfg.hint':'Если задан — конфиг тянется по этому URL и применяется автоматически (при старте и по интервалу); локальные правки перезаписываются. Для подписанного канала (рекомендуется) нужен <url>.sig, проверяемый ТВОИМ доверенным ключом — сгенерируй пару `mksign genkey`, публичную половину впиши сюда, конфиги подписывай приватной.'
+    'cfg.title':'Конфиг с сервера','cfg.url':'URL конфига','cfg.urlPh':'https://…/socksit.yaml — пусто = локальный конфиг','cfg.interval':'Интервал обновления','cfg.merge':'При обновлении','cfg.merge.replace':'Заменять конфиг','cfg.merge.override':'Переопределять поля','cfg.proxy':'Proxy для конфига','cfg.proxyPh':'пусто = напрямую · system · use-socks · socks5://host:port','cfg.mergeHint':'Заменять: локальный конфиг целиком меняется на удалённый. Переопределять: меняются только поля, заданные в удалённом; остальные настройки сохраняются, а список приложений = удалённый плюс твои личные.','cfg.managedApps':'Также проксируются, из управляемого конфига:','cfg.managedTag':'из канала','cfg.managedSubnets':'Также напрямую, из управляемого конфига:','cfg.rotate.title':'Запрос на смену ключа','cfg.rotate.msg':'Сервер конфигурации просит сменить доверенный ключ. Принятие меняет корень доверия — принимай только если ты сам инициировал ротацию.','cfg.rotate.accept':'Принять новый ключ','cfg.rotate.decline':'Отклонить','cfg.rotate.confirm':'Сменить доверенный ключ на предложенный? Принимай только если ты это инициировал.','cfg.signed':'Требовать подпись','cfg.pubkey':'Доверенный ключ (base64)','cfg.pubkeyPh':'публичный Ed25519 из `mksign genkey`','cfg.fetch':'Обновить сейчас','cfg.fetching':'Обновление…','cfg.local':'Используется локальный конфиг.','cfg.fetched':'Обновлено {t}','cfg.changed':' (изменён)','cfg.hint':'Если задан — конфиг тянется по этому URL и применяется автоматически (при старте и по интервалу); локальные правки перезаписываются. Для подписанного канала (рекомендуется) нужен <url>.sig, проверяемый ТВОИМ доверенным ключом — сгенерируй пару `mksign genkey`, публичную половину впиши сюда, конфиги подписывай приватной.'
   }
 };
 let lang = 'en';
@@ -686,21 +774,42 @@ function setProxySel(id, val){
   }
   sel.value = val;
 }
-// applyProxyAllLock greys out the application list when every app is proxied:
-// the list is ignored in that mode, so showing it as editable would be a lie.
-function applyProxyAllLock(){
-  const on = g('fProxyAll').checked;
-  const card = g('appList') && g('appList').closest('.card');
-  if(card){ card.style.opacity = on ? .45 : 1; card.title = on ? t('hint.proxyAll') : ''; }
-  ['fApp','btnBrowse','btnAddApp','btnReloadProc','fMode'].forEach(id=>{ const e=g(id); if(e) e.disabled = on; });
+// applyPolicy reflects the three-way routing choice. "All traffic" is a separate
+// config field (proxy_all) rather than a mode, but as a choice it is mutually
+// exclusive with the two list modes, so the UI presents one question, not two.
+// The app list is greyed out in that case: it is genuinely ignored.
+let policyMode = 'allowlist'; // remembers the list mode while "all traffic" is picked
+function currentPolicy(){
+  const r = document.querySelector('input[name=pmode]:checked');
+  return r ? r.value : 'allowlist';
 }
-
+function applyPolicy(){
+  const pol = currentPolicy();
+  if(pol !== 'all') policyMode = pol;
+  [...document.querySelectorAll('#policyOpts .opt')].forEach(o=>{
+    o.classList.toggle('sel', o.dataset.pol === pol);
+  });
+  const off = pol === 'all';
+  const block = g('appBlock');
+  if(block){ block.classList.toggle('off', off); block.title = off ? t('pol.allSub') : ''; }
+  ['fApp','btnBrowse','btnAddApp','btnReloadProc'].forEach(id=>{ const e=g(id); if(e) e.disabled = off; });
+}
+function setPolicy(mode, proxyAll){
+  policyMode = (mode === 'blocklist') ? 'blocklist' : 'allowlist';
+  const want = proxyAll ? 'all' : policyMode;
+  const r = document.querySelector('input[name=pmode][value="' + want + '"]');
+  if(r) r.checked = true;
+  applyPolicy();
+}
 // applyAuthLock enables the login/password fields only when "Authentication" is
 // on; unchecking it means the stored credentials are cleared on save.
 function applyAuthLock(){
   const on = g('fAuth').checked;
   g('fUser').disabled = !on;
   g('fPass').disabled = !on;
+  // Hidden, not just disabled: two greyed-out boxes look like something is broken,
+  // and the fields are meaningless for a proxy that takes no credentials.
+  [...document.querySelectorAll('#s-settings .creds')].forEach(e=>{ e.style.display = on ? '' : 'none'; });
 }
 async function loadSettings(){
   const c = await call('appGetConfig');
@@ -708,11 +817,10 @@ async function loadSettings(){
   document.getElementById('fPort').value = c.port||1080;
   document.getElementById('fUser').value = '';
   document.getElementById('fPass').value = '';
-  g('fProxyAll').checked = !!c.proxyAll;
-  applyProxyAllLock();
+  setPolicy(c.mode, c.proxyAll);
   g('fAuth').checked = !!(last && last.hasCreds); // reflects stored credentials (reported by the service)
   applyAuthLock();
-  document.getElementById('fMode').value = c.mode||'allowlist';
+
   subnets = (c.directSubnets||[]).slice();
   domains = (c.directDomains||[]).slice();
   renderDomains();
@@ -726,6 +834,7 @@ async function loadSettings(){
   managedApps = (c.managedApps||[]).slice();
   managedSubnets = (c.managedSubnets||[]).slice();
   g('cfgUrl').value = c.cfgUrl||'';
+  applyCfgSummary();
   g('cfgInterval').value = c.cfgInterval||'1h';
   g('cfgMerge').value = c.cfgMerge || 'override';
   setProxySel('cfgProxy', c.cfgProxy);
@@ -763,7 +872,7 @@ async function loadProcs(){
 document.getElementById('btnReloadProc').onclick = loadProcs;
 g('cfgMerge').onchange = ()=>{ renderApps(); renderSubnets(); };
 g('fAuth').onchange = applyAuthLock;
-g('fProxyAll').onchange = applyProxyAllLock;
+[...document.querySelectorAll('input[name=pmode]')].forEach(r=>{ r.onchange = applyPolicy; });
 document.getElementById('btnBrowse').onclick = async ()=>{ const p = await call('appBrowseExe'); if(p){ const i=document.getElementById('fApp'); i.value = p; i.focus(); } };
 document.getElementById('btnAddApp').onclick = ()=>{ const i=document.getElementById('fApp'); const v=(i.value||'').trim(); if(v){ apps.push(v); i.value=''; renderApps(); } };
 document.getElementById('fApp').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); document.getElementById('btnAddApp').click(); }});
@@ -789,11 +898,20 @@ g('subnetInput').addEventListener('paste', e=>{
   e.preventDefault(); txt.split(/[\s,;]+/).filter(Boolean).forEach(p=>{ if(validCidr(p) && !subnets.some(x=>x.toLowerCase()===p.toLowerCase())) subnets.push(p); });
   renderSubnets(); g('subnetInput').focus();
 });
+// applyCfgSummary keeps the collapsed header informative: a closed block that
+// says nothing hides whether the config is managed at all.
+function applyCfgSummary(){
+  const url = (g('cfgUrl').value||'').trim();
+  const el = g('cfgSummary'); if(!el) return;
+  el.textContent = url ? url : t('cfg.state.off');
+  if(url) g('cfgAdv').open = true;
+}
+
 function collect(){
   return { address:document.getElementById('fAddress').value.trim(), port:parseInt(document.getElementById('fPort').value||'1080',10),
     username:document.getElementById('fUser').value, password:document.getElementById('fPass').value, auth:document.getElementById('fAuth').checked,
-    mode:document.getElementById('fMode').value, killSwitch:document.getElementById('fKill').checked,
-    udp:document.getElementById('fUdp').checked, showTray:document.getElementById('fTray').checked, proxyAll:document.getElementById('fProxyAll').checked,
+    mode:policyMode, killSwitch:document.getElementById('fKill').checked,
+    udp:document.getElementById('fUdp').checked, showTray:document.getElementById('fTray').checked, proxyAll:currentPolicy()==='all',
     directSubnets:subnets.slice(), directDomains:domains.slice(), apps:apps.slice(),
     cfgUrl:document.getElementById('cfgUrl').value.trim(), cfgInterval:document.getElementById('cfgInterval').value.trim()||'1h', cfgMerge:document.getElementById('cfgMerge').value, cfgProxy:document.getElementById('cfgProxy').value.trim(), cfgSigned:document.getElementById('cfgSigned').checked, cfgPubKey:document.getElementById('cfgPubKey').value.trim() };
 }
