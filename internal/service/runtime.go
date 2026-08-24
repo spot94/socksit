@@ -243,7 +243,8 @@ func (r *Runtime) superviseLoop(ctx context.Context) error {
 			EnginePath: r.EnginePath,
 			ConfigPath: r.genPath(),
 			ReadyAddr:  cfg.Control.ClashAPI,
-			Stdout:     r.log,
+			// Name the app behind the engine's connection errors (see engineLogAnnotator).
+			Stdout: newEngineLogAnnotator(r.log, cfg.Control.ClashAPI),
 		})
 		r.sup.Store(sup)
 
