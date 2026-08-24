@@ -102,6 +102,10 @@ type Config struct {
 	// feed's subnets are kept here and unioned with the user's own DirectSubnets
 	// (see EffectiveSubnets). Empty/absent in replace mode.
 	ManagedSubnets []string `yaml:"managed_subnets,omitempty"`
+	// ManagedDomains is the same for direct_domains: names the feed says must
+	// never go through the proxy. Kept separate from the user's own list so
+	// clearing the field on the server clears exactly the feed's contribution.
+	ManagedDomains []string `yaml:"managed_domains,omitempty"`
 	// CachePath is where the engine persists its state (notably the fake-ip
 	// table). Runtime-only: set by the service from its data dir, never read from
 	// or written to the YAML.
@@ -472,8 +476,8 @@ func (c *Config) DemoteIfUnmanaged() bool {
 		return false
 	}
 	changed := false
-	if len(c.ManagedApps) > 0 || len(c.ManagedSubnets) > 0 {
-		c.ManagedApps, c.ManagedSubnets = nil, nil
+	if len(c.ManagedApps) > 0 || len(c.ManagedSubnets) > 0 || len(c.ManagedDomains) > 0 {
+		c.ManagedApps, c.ManagedSubnets, c.ManagedDomains = nil, nil, nil
 		changed = true
 	}
 	cs := &c.ConfigSource
@@ -568,10 +572,14 @@ func ValidDomainEntry(s string) error {
 // EffectiveDirectDomains is the configured never-proxied name list, or the
 // built-in defaults when the key is absent. An explicit empty list exempts none.
 func (c *Config) EffectiveDirectDomains() []string {
-	if c.DirectDomains == nil {
-		return append([]string(nil), DefaultDirectDomains...)
+	own := c.DirectDomains
+	if own == nil {
+		own = DefaultDirectDomains
 	}
-	return trimNonEmpty(c.DirectDomains)
+	if c.ConfigManaged() && c.MergeMode() == MergeOverride {
+		return dedupeList(trimNonEmpty(own), c.ManagedDomains)
+	}
+	return trimNonEmpty(own)
 }
 
 // ProxyAllOn reports whether every application is proxied, ignoring the app
@@ -695,6 +703,11 @@ func (c *Config) Validate() error {
 	for _, d := range c.DirectDomains {
 		if err := ValidDomainEntry(d); err != nil {
 			return fmt.Errorf("direct_domains: %w", err)
+		}
+	}
+	for _, d := range c.ManagedDomains {
+		if err := ValidDomainEntry(d); err != nil {
+			return fmt.Errorf("managed_domains: %w", err)
 		}
 	}
 	for _, sn := range c.BypassCIDRs {

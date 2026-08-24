@@ -129,6 +129,8 @@
           <div class="grid" style="margin-top:10px">
             <label class="fld"><span data-i18n="lbl.appsMulti">Apps (one per line)</span><textarea id="fApps" placeholder="chrome.exe&#10;Telegram.exe"></textarea></label>
             <label class="fld"><span data-i18n="lbl.subnetsMulti">Direct subnets (one per line)</span><textarea id="fSubnets" placeholder="192.168.1.0/24"></textarea></label>
+            <label class="fld"><span data-i18n="lbl.domainsMulti">Direct names (one per line)</span><textarea id="fDomains" placeholder="agent-gw.example.com&#10;.corp.local"></textarea></label>
+            <div class="sub muted" data-i18n="hint.domains" style="grid-column:1/-1"></div>
           </div>
           <div class="banner" id="editBanner"></div>
           <div class="row" style="margin-top:12px"><button class="primary" id="btnSaveProfile" data-i18n="btn.saveSign">Save &amp; sign</button><button class="danger" id="btnDeleteProfile" data-i18n="btn.delete">Delete</button></div>
@@ -143,7 +145,7 @@
               <label class="fld wide"><span data-i18n="lbl.applyMode">Apply mode</span><select id="mMerge"><option value="" data-i18n="opt.unchanged">(unchanged)</option><option value="replace" data-i18n="opt.replaceServer">Replace — server controls everything</option><option value="override" data-i18n="opt.overrideClients">Override — clients keep their own</option></select></label>
               <label class="fld wide"><span data-i18n="lbl.rotateKey">Rotate trusted key (new pubkey)</span><input type="text" id="mPubKey" class="mono" placeholder="new base64 Ed25519 public key"></label>
             </div>
-            <div class="sub muted" style="margin-top:6px" data-i18n="hint.configChannel">URL and apply mode apply automatically (still guarded by the pinned key). Replace = clients take exactly this config; Override = clients keep their own apps/subnets on top. A new trusted key moves the root of trust, so each client's admin must approve it.</div>
+            <div class="sub muted" style="margin-top:6px" data-i18n="hint.configChannel">URL and apply mode apply automatically (still guarded by the pinned key). Replace = clients take exactly this config; Override = clients keep their own apps/subnets/names on top. A new trusted key moves the root of trust, so each client's admin must approve it.</div>
           </div>
 
           <div class="mgroup">
@@ -221,13 +223,14 @@ const I18N = {
     'opt.user':'user-defined','opt.onForced':'on (forced)','opt.offForced':'off (forced)',
     'hint.triToggle':'on/off force the value and lock the toggle on clients; user-defined leaves it to each client.',
     'lbl.appsMulti':'Apps (one per line)','lbl.subnetsMulti':'Direct subnets (one per line)',
+    'lbl.domainsMulti':'Direct names (one per line)','hint.domains':'Names that must never go through the proxy — an endpoint that refuses the proxy address, or an intranet host reached by name. Leave empty to say nothing: clients keep their own list either way.',
     'btn.saveSign':'Save & sign','btn.delete':'Delete',
     'h.migration':'Migration (optional) — pushed to clients',
     'hint.migration':'Leave a field empty to keep it unchanged; clear everything to remove the migration.',
     'sub.configChannel':'Config channel','lbl.newConfigUrl':'New config URL','lbl.applyMode':'Apply mode',
     'opt.unchanged':'(unchanged)','opt.replaceServer':'Replace — server controls everything','opt.overrideClients':'Override — clients keep their own',
     'lbl.rotateKey':'Rotate trusted key (new pubkey)',
-    'hint.configChannel':"URL and apply mode apply automatically (still guarded by the pinned key). Replace = clients take exactly this config; Override = clients keep their own apps/subnets on top. A new trusted key moves the root of trust, so each client's admin must approve it.",
+    'hint.configChannel':"URL and apply mode apply automatically (still guarded by the pinned key). Replace = clients take exactly this config; Override = clients keep their own apps/subnets/names on top. A new trusted key moves the root of trust, so each client's admin must approve it.",
     'sub.updateChannel':'Update channel','lbl.updEndpoint':'Update endpoint','lbl.updChannel':'Update channel','lbl.updMode':'Update mode',
     'hint.updateChannel':'Applied automatically; app binaries are still verified against the built-in update key.',
     'h.snippet':'Client snippet (config_source)','btn.copy':'Copy',
@@ -253,6 +256,7 @@ const I18N = {
     'opt.user':'по выбору клиента','opt.onForced':'вкл (форс)','opt.offForced':'выкл (форс)',
     'hint.triToggle':'вкл/выкл форсируют значение и блокируют тумблер у клиентов; «по выбору клиента» оставляет решение клиенту.',
     'lbl.appsMulti':'Приложения (по одному в строке)','lbl.subnetsMulti':'Прямые подсети (по одной в строке)',
+    'lbl.domainsMulti':'Прямые домены (по одному в строке)','hint.domains':'Имена, которые никогда не идут через прокси: эндпоинт, отказывающий адресу прокси, или внутренний узел, к которому обращаются по имени. Пусто = ничего не навязываем, свой список у клиента остаётся в любом случае.',
     'btn.saveSign':'Сохранить и подписать','btn.delete':'Удалить',
     'h.migration':'Миграция (опц.) — рассылается клиентам',
     'hint.migration':'Пустое поле — не менять; очисти всё — убрать миграцию.',
@@ -415,7 +419,7 @@ async function selectProfile(name){
   $('#pName').textContent = name;
   $('#fAddr').value=v.address||''; $('#fPort').value=v.port||1080; $('#fMode').value=v.mode||'allowlist';
   $('#fUdp').value=v.udp||'user'; $('#fKill').value=v.killSwitch||'user';
-  $('#fApps').value=(v.apps||[]).join('\n'); $('#fSubnets').value=(v.subnets||[]).join('\n');
+  $('#fApps').value=(v.apps||[]).join('\n'); $('#fSubnets').value=(v.subnets||[]).join('\n'); $('#fDomains').value=(v.domains||[]).join('\n');
   const mg = v.migrate||{};
   $('#mConfigUrl').value=mg.configUrl||''; $('#mMerge').value=mg.merge||''; $('#mUpdEndpoint').value=mg.updateEndpoint||'';
   $('#mUpdChannel').value=mg.updateChannel||''; $('#mUpdMode').value=mg.updateMode||''; $('#mPubKey').value=mg.pubkey||'';
@@ -426,7 +430,7 @@ function collect(){
   const lines = s => (s||'').split('\n').map(x=>x.trim()).filter(Boolean);
   return { address:$('#fAddr').value.trim(), port:parseInt($('#fPort').value||'1080',10), mode:$('#fMode').value,
     udp:$('#fUdp').value, killSwitch:$('#fKill').value,
-    apps:lines($('#fApps').value), subnets:lines($('#fSubnets').value),
+    apps:lines($('#fApps').value), subnets:lines($('#fSubnets').value), domains:lines($('#fDomains').value),
     migrate:{ configUrl:$('#mConfigUrl').value.trim(), merge:$('#mMerge').value, updateEndpoint:$('#mUpdEndpoint').value.trim(),
       updateChannel:$('#mUpdChannel').value.trim(), updateMode:$('#mUpdMode').value, pubkey:$('#mPubKey').value.trim() } };
 }

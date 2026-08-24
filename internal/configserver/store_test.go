@@ -1,6 +1,7 @@
 package configserver
 
 import (
+	"strings"
 	"testing"
 
 	"socksit/internal/config"
@@ -140,5 +141,55 @@ func TestMigrateSidecarRoundtrip(t *testing.T) {
 	bad.Migrate = &MigrateView{ConfigURL: "not-a-url"}
 	if err := s.SaveProfile(bad); err == nil {
 		t.Fatal("invalid migrate.configUrl should be rejected")
+	}
+}
+
+// TestProfileCarriesDirectDomains: an admin must be able to push a name
+// exemption to the fleet, not just apps and subnets — that is what a blocked
+// endpoint needs, and doing it per machine does not scale.
+func TestProfileCarriesDirectDomains(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GenerateKey(); err != nil {
+		t.Fatal(err)
+	}
+	v := &ProfileView{Name: "team", Address: "10.0.0.1", Port: 1080, Mode: "allowlist",
+		Apps: []string{"claude.exe"}, Domains: []string{"agent-gw.example.com", ".corp.example"}}
+	if err := s.SaveProfile(v); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	body, _, err := s.ServedBytes("team")
+	if err != nil {
+		t.Fatalf("served: %v", err)
+	}
+	if !strings.Contains(string(body), "direct_domains:") || !strings.Contains(string(body), "agent-gw.example.com") {
+		t.Errorf("the feed must carry the names:\n%s", body)
+	}
+	got, err := s.GetProfile("team")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if len(got.Domains) != 2 || got.Domains[0] != "agent-gw.example.com" {
+		t.Errorf("the editor must show what was saved, got %v", got.Domains)
+	}
+
+	// Blank means "no opinion", not "wipe the client's list": an empty key would
+	// strip the built-in exemptions, including the probe Windows uses to decide
+	// whether it has internet at all.
+	v.Domains = nil
+	if err := s.SaveProfile(v); err != nil {
+		t.Fatalf("save without names: %v", err)
+	}
+	body, _, _ = s.ServedBytes("team")
+	if strings.Contains(string(body), "direct_domains") {
+		t.Errorf("an empty list must be omitted entirely:\n%s", body)
+	}
+
+	// The client's own validation applies: a CIDR here would match nothing.
+	v.Domains = []string{"10.0.0.0/8"}
+	if err := s.SaveProfile(v); err == nil {
+		t.Error("a CIDR in the names field must be rejected")
 	}
 }

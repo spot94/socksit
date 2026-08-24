@@ -143,6 +143,7 @@ func (r *Runtime) fetchConfig(ctx context.Context) (configFetchResult, error) {
 	// not silently reset them to defaults.
 	newCfg.ShowTray = cfg.ShowTray
 	newCfg.ProxyAll = cfg.ProxyAll
+	keepLocalNetworkFacts(newCfg, cfg, body)
 	// Fields the feed actually carries (kill_switch / proxy.udp) are server-forced;
 	// record them so the panel can lock those toggles. Absent = user-defined.
 	newCfg.ConfigSource.Locked = lockedFromFeed(body)
@@ -176,6 +177,36 @@ func (r *Runtime) fetchConfig(ctx context.Context) (configFetchResult, error) {
 	res.Fetched = time.Now().UTC().Format(time.RFC3339)
 	r.lastConfig.Store(&res)
 	return res, nil
+}
+
+// keepLocalNetworkFacts carries over the settings that describe THIS machine's
+// network rather than fleet policy, so replace mode does not silently reset them
+// to defaults on the next refresh. Both have already cost real downtime:
+//
+//   - bypass_cidrs is the router in front of this machine (a FakeIP router hands
+//     out addresses only it understands). The feed never carries it, so it is
+//     always kept; resetting it black-holes that traffic within the hour, looking
+//     exactly like "nothing changed and it stopped working".
+//   - direct_domains may come from the feed. When it does not — an older server,
+//     or the field left empty — the local list stays: it is where a user puts the
+//     endpoint that refuses the proxy's address, and losing it re-breaks the app.
+func keepLocalNetworkFacts(newCfg, local *config.Config, body []byte) {
+	newCfg.BypassCIDRs = local.BypassCIDRs
+	if !feedHasKey(body, "direct_domains") {
+		newCfg.DirectDomains = local.DirectDomains
+	}
+}
+
+// feedHasKey reports whether the feed body sets a top-level key at all, which is
+// how "the server says nothing about this" is told apart from "the server says
+// it is empty".
+func feedHasKey(body []byte, key string) bool {
+	var m map[string]any
+	if yaml.Unmarshal(body, &m) != nil {
+		return false
+	}
+	_, ok := m[key]
+	return ok
 }
 
 // mergeManagedConfig applies the remote config as an OVERRIDE onto the current
@@ -220,6 +251,14 @@ func mergeManagedConfig(local *config.Config, remoteBody []byte) (*config.Config
 		merged["managed_subnets"] = rs
 	} else {
 		merged["managed_subnets"] = localMap["managed_subnets"]
+	}
+	// direct_domains union the same way. Absent from the feed keeps whatever the
+	// client already had from it, so an older server simply contributes nothing.
+	merged["direct_domains"] = localMap["direct_domains"]
+	if rd, ok := remoteMap["direct_domains"]; ok {
+		merged["managed_domains"] = rd
+	} else {
+		merged["managed_domains"] = localMap["managed_domains"]
 	}
 	// Preserve the local managed-config policy (URL, key, interval, merge mode).
 	merged["config_source"] = localMap["config_source"]

@@ -86,6 +86,7 @@ type configView struct {
 	CfgPendingPubKey string   `json:"cfgPendingPubKey"`
 	ManagedApps      []string `json:"managedApps"`
 	ManagedSubnets   []string `json:"managedSubnets"`
+	ManagedDomains   []string `json:"managedDomains"`
 	CfgLocked        []string `json:"cfgLocked"`
 }
 
@@ -366,6 +367,7 @@ func (a *app) getConfig() configView {
 		CfgPendingPubKey: c.ConfigSource.PendingPubKey,
 		ManagedApps:      nonNil(c.ManagedApps),
 		ManagedSubnets:   nonNil(c.ManagedSubnets),
+		ManagedDomains:   nonNil(c.ManagedDomains),
 		CfgLocked:        nonNil(c.ConfigSource.Locked),
 	}
 }

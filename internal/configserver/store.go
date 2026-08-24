@@ -121,6 +121,7 @@ type ProfileView struct {
 	KillSwitch string   `json:"killSwitch"` // "on" | "off" | "user"
 	Apps       []string `json:"apps"`
 	Subnets    []string `json:"subnets"`
+	Domains    []string `json:"domains"`
 	// Migrate optionally proposes channel changes to clients (server moved, key
 	// rotation) via the signed migrate.yaml sidecar. nil/empty = no migration.
 	Migrate *MigrateView `json:"migrate,omitempty"`
@@ -166,6 +167,11 @@ type feedConfig struct {
 	// from "absent" (keep them). Same as apps, so clearing the field on the server
 	// actually clears the managed subnets on clients.
 	DirectSubnets []string `yaml:"direct_subnets"`
+	// direct_domains IS omitempty, unlike the two lists above: an empty list here
+	// would mean "exempt no name at all" and would strip the client's built-in
+	// exemptions — mDNS, and the Windows connectivity probes that decide whether
+	// the machine thinks it is online. Blank on the server means "not my business".
+	DirectDomains []string `yaml:"direct_domains,omitempty"`
 	Mode          string   `yaml:"mode"`
 	// kill_switch / udp are tri-state: present (true/false) = server forces it and
 	// the client locks the toggle; absent (nil, via omitempty) = user-defined.
@@ -227,6 +233,13 @@ func (s *Store) GetProfile(name string) (*ProfileView, error) {
 		KillSwitch: triState(c.KillSwitch),
 		Apps:       c.Apps,
 		Subnets:    c.DirectSubnets,
+	}
+	// Read direct_domains off the raw feed rather than the parsed config: parsing
+	// backfills the client's defaults for an absent key, and those would show in
+	// the editor as if an operator had typed them.
+	var raw feedConfig
+	if yaml.Unmarshal(b, &raw) == nil {
+		pv.Domains = raw.DirectDomains
 	}
 	if mb, err := os.ReadFile(s.migrateYamlPath(name)); err == nil {
 		var fm feedMigrate
@@ -360,6 +373,9 @@ func (v *ProfileView) toConfig() *config.Config {
 	c.Mode = v.Mode
 	c.Apps = cleanList(v.Apps)
 	c.DirectSubnets = cleanList(v.Subnets)
+	// Always assign, even when empty: Default() seeds the client's own defaults
+	// here, and leaving them would publish them back as if the operator chose them.
+	c.DirectDomains = cleanList(v.Domains)
 	return c
 }
 
@@ -393,6 +409,7 @@ func feedFromConfig(c *config.Config) feedConfig {
 		Proxy:         feedProxy{Address: c.Proxy.Address, Port: c.Proxy.Port}, // UDP set by caller (tri-state)
 		Apps:          c.Apps,
 		DirectSubnets: c.DirectSubnets,
+		DirectDomains: c.DirectDomains,
 		Mode:          c.Mode,
 		// KillSwitch set by caller (tri-state)
 	}
