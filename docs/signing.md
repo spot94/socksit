@@ -82,8 +82,8 @@ Import-Certificate -FilePath socksit-codesign.cer -CertStoreLocation Cert:\Local
 сертификат появится в хранилище Windows как смарт-карта, дальше подпись обычная:
 
 ```powershell
-.uild\sign.ps1 -Files dist\socksit.exe,dist\sing-box.exe    # авто-выбор сертификата
-.uild\sign.ps1 -Thumbprint <thumbprint> -Files dist\SocksIt.msi
+.\build\sign.ps1 -Files dist\socksit.exe,dist\sing-box.exe    # авто-выбор сертификата
+.\build\sign.ps1 -Thumbprint <thumbprint> -Files dist\SocksIt.msi
 ```
 
 `build/release-local.ps1` делает это сам — отдельный вызов нужен только для разовой подписи.
