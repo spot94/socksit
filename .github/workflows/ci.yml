@@ -1,0 +1,72 @@
+name: ci
+
+# Runs on every push and pull request. Two jobs the project went without until
+# now, and both bit us: the test suite only ever ran on a developer machine whose
+# antivirus blocks freshly built test binaries, and the installer was only built
+# during a release — where a broken build fails the release itself, halfway.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        env:
+          CGO_ENABLED: '0'
+        run: go test ./...
+
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build socksit.exe
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          mkdir dist
+          go build -trimpath -ldflags "-H=windowsgui -s -w -X main.Version=0.0.0-ci" -o dist/socksit.exe ./cmd/socksit
+      # The engine is fetched because the package embeds it; this also keeps the
+      # pinned-version script exercised outside release day.
+      - name: Fetch pinned sing-box engine
+        shell: pwsh
+        run: |
+          pwsh -File build/fetch-engine.ps1
+          Copy-Item assets/bin/sing-box.exe dist/sing-box.exe -Force
+      - name: Build the installer (MSI)
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2 2>&1 | Out-Null
+          $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
+          pwsh -File build/build-msi.ps1 -Version '0.0.0' -From dist
+      # An administrative install unpacks the package without touching the system:
+      # no service registered, nothing installed, but a broken .wxs still fails.
+      - name: Verify the installer unpacks
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'msi-check'
+          $log = Join-Path $env:RUNNER_TEMP 'admin-install.log'
+          $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @(
+            '/a', (Resolve-Path build/SocksIt.msi), '/qn', "TARGETDIR=$dir", '/l*v', $log)
+          if ($p.ExitCode -ne 0) { Get-Content $log -Tail 40; throw "msiexec /a failed: $($p.ExitCode)" }
+          foreach ($f in 'socksit.exe','sing-box.exe') {
+            $path = Join-Path $dir "SocksIt\$f"
+            if (-not (Test-Path $path)) { throw "the package is missing $f" }
+            '{0}: {1:N0} bytes' -f $f, (Get-Item $path).Length
+          }
