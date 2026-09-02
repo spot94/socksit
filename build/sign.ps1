@@ -3,9 +3,12 @@
   Authenticode-sign SocksIt binaries (SHA-256 + RFC-3161 timestamp).
 
 .NOTES
-  Sign ONLY the binaries you build: socksit.exe / socksit-setup.exe (and an MSI if
-  you make one). NEVER re-sign vendor files (sing-box.exe, libcronet.dll,
-  wintun.dll) — they carry upstream signatures and re-signing can break them.
+  Sign what you distribute: socksit.exe, socksit-setup.exe and SocksIt.msi. The
+  release also signs sing-box.exe — upstream publishes it UNSIGNED (verified), so
+  this adds a signature rather than replacing one, and the alternative is shipping
+  an unsigned 45 MB binary that our own updater downloads. Never re-sign a vendor
+  file that DOES carry an upstream signature (libcronet.dll, wintun.dll): replacing
+  it can break the chain the vendor relies on.
   EV is no longer required for SmartScreen (Microsoft removed the instant-reputation
   edge ~2024); use Azure Trusted Signing or an OV token/HSM cert. See plan U11/KTD9.
 

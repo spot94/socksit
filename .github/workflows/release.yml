@@ -37,6 +37,25 @@ jobs:
           echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           echo "engine=$(sed -n 's/^SINGBOX_VERSION=//p' assets/bin/VERSION)" >> "$GITHUB_OUTPUT"
 
+      # A Go binary carries no VERSIONINFO unless one is embedded, and a nameless PE
+      # with no description scores worse with AV heuristics and shows an empty
+      # publisher in Windows' own dialogs. Stamped here so it matches the tag.
+      - name: Stamp version metadata into the exe resource
+        shell: bash
+        run: |
+          V="${{ steps.meta.outputs.version }}"
+          MAJ="${V%%.*}"; REST="${V#*.}"; MIN="${REST%%.*}"; PAT="${REST#*.}"; PAT="${PAT%%[!0-9]*}"
+          jq --argjson maj "${MAJ:-0}" --argjson min "${MIN:-0}" --argjson pat "${PAT:-0}" --arg v "$V.0" \
+            '.FixedFileInfo.FileVersion    = {Major:$maj,Minor:$min,Patch:$pat,Build:0}
+           | .FixedFileInfo.ProductVersion = {Major:$maj,Minor:$min,Patch:$pat,Build:0}
+           | .StringFileInfo.FileVersion   = $v
+           | .StringFileInfo.ProductVersion = $v' \
+            cmd/socksit/versioninfo.json > cmd/socksit/versioninfo.stamped.json
+          mv cmd/socksit/versioninfo.stamped.json cmd/socksit/versioninfo.json
+          cd cmd/socksit
+          go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.4.1 \
+            -64 -o rsrc_windows_amd64.syso versioninfo.json
+
       - name: Fetch pinned sing-box engine
         shell: pwsh
         run: pwsh -File build/fetch-engine.ps1
@@ -52,25 +71,58 @@ jobs:
             -o dist/socksit.exe ./cmd/socksit
           cp assets/bin/sing-box.exe dist/sing-box.exe
 
-      # Authenticode-sign the exe we build (NOT sing-box.exe — it's a vendor binary
-      # with its own upstream signature). Runs BEFORE "Build + sign manifest":
-      # signing changes socksit.exe's bytes and mksign hashes it for the update
-      # manifest, so the manifest must cover the signed file. No cert secret set →
-      # publishes unsigned (as before).
-      - name: Authenticode-sign socksit.exe
+      # Authenticode-sign what we publish. sing-box.exe is signed too: upstream
+      # ships it UNSIGNED (verified), so this adds a signature rather than
+      # replacing one, and it means the fleet stops carrying a 45 MB unsigned
+      # binary that our own updater downloads. Runs BEFORE the installer is built
+      # (so the package contains signed files) and before the manifest (which
+      # hashes them). No cert secret set → everything publishes unsigned.
+      - name: Authenticode-sign the binaries
+        id: sign
         shell: pwsh
         env:
           WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PFX_BASE64)) {
-            Write-Host "::warning::No WINDOWS_CERT_PFX_BASE64 secret set — publishing an UNSIGNED socksit.exe (SmartScreen/AV will flag it)."
+            Write-Host "::warning::No WINDOWS_CERT_PFX_BASE64 secret set — publishing UNSIGNED binaries (SmartScreen/AV will flag them). See docs/signing.md."
+            "unsigned=true" >> $env:GITHUB_OUTPUT
             exit 0
           }
           $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
           [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
           try {
-            ./build/sign.ps1 -Pfx $pfx -PfxPassword $env:WINDOWS_CERT_PASSWORD -Files dist/socksit.exe -SkipVerify
+            ./build/sign.ps1 -Pfx $pfx -PfxPassword $env:WINDOWS_CERT_PASSWORD -Files dist/socksit.exe,dist/sing-box.exe -SkipVerify
+          }
+          finally {
+            Remove-Item $pfx -Force -ErrorAction SilentlyContinue
+          }
+
+      # The installer is the artifact people should download: an MSI is the shape
+      # Windows expects software to arrive in, and it is what lets a machine update
+      # through msiexec later instead of the exe swap that behavioural AV flags.
+      - name: Build the installer (MSI)
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2 2>&1 | Out-Null
+          $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
+          pwsh -File build/build-msi.ps1 -Version '${{ steps.meta.outputs.version }}' -From dist
+          Move-Item build/SocksIt.msi dist/SocksIt.msi -Force
+
+      - name: Authenticode-sign the installer
+        shell: pwsh
+        env:
+          WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PFX_BASE64)) {
+            Write-Host "::warning::Publishing an UNSIGNED installer."
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'codesign-msi.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
+          try {
+            ./build/sign.ps1 -Pfx $pfx -PfxPassword $env:WINDOWS_CERT_PASSWORD -Files dist/SocksIt.msi -SkipVerify
           }
           finally {
             Remove-Item $pfx -Force -ErrorAction SilentlyContinue
@@ -85,6 +137,7 @@ jobs:
           go run ./cmd/mksign build \
             -app dist/socksit.exe \
             -engine dist/sing-box.exe \
+            -msi dist/SocksIt.msi \
             -engine-version "${{ steps.meta.outputs.engine }}" \
             -version "${{ steps.meta.outputs.version }}" \
             -channel stable \
@@ -98,7 +151,11 @@ jobs:
         with:
           name: SocksIt ${{ steps.meta.outputs.version }}
           generate_release_notes: true # auto "What's Changed" from commits/PRs since the previous tag
+          # Stated in the release itself: an unsigned build was the kind of thing
+          # that could only be discovered by inspecting the PE afterwards.
+          body: ${{ steps.sign.outputs.unsigned == 'true' && '> **Unsigned build** — no code-signing certificate is configured for this repository, so SmartScreen and antivirus will warn. See docs/signing.md.' || '' }}
           files: |
+            dist/SocksIt.msi
             dist/socksit.exe
             dist/sing-box.exe
             dist/manifest.json
