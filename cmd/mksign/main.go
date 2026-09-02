@@ -31,13 +31,15 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fail("usage: mksign genkey | mksign build [flags]")
+		fail("usage: mksign genkey | build [flags] | verify [flags] | sign-config [flags]")
 	}
 	switch os.Args[1] {
 	case "genkey":
 		genkey()
 	case "build":
 		build(os.Args[2:])
+	case "verify":
+		verify(os.Args[2:])
 	case "sign-config":
 		signConfig(os.Args[2:])
 	default:

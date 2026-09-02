@@ -13,9 +13,20 @@ name: release
 # code-signing .pfx) and WINDOWS_CERT_PASSWORD. Absent → exe is published unsigned.
 # See docs/signing.md.
 
+# Manual only. Signed releases are cut from a developer machine with
+# build/release-local.ps1, because a publicly trusted code-signing key lives on a
+# token or in a cloud HSM and cannot be handed to a runner. If this workflow also
+# fired on tags it would publish UNSIGNED artifacts over the signed ones — and
+# worse, silently break updates: the manifest carries the files' hashes, so the
+# last upload wins and every client rejects the mismatch.
+#
+# Kept for an emergency unsigned build (Actions -> release -> Run workflow).
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build, e.g. v0.3.2'
+        required: true
 
 permissions:
   contents: write
@@ -25,6 +36,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
 
       - uses: actions/setup-go@v5
         with:
@@ -34,7 +47,9 @@ jobs:
         id: meta
         shell: bash
         run: |
-          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          TAG="${{ inputs.tag }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
           echo "engine=$(sed -n 's/^SINGBOX_VERSION=//p' assets/bin/VERSION)" >> "$GITHUB_OUTPUT"
 
       # A Go binary carries no VERSIONINFO unless one is embedded, and a nameless PE
@@ -133,7 +148,7 @@ jobs:
         env:
           SOCKSIT_SIGN_KEY: ${{ secrets.SOCKSIT_SIGN_KEY }}
         run: |
-          BASE="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
+          BASE="https://github.com/${{ github.repository }}/releases/download/${{ steps.meta.outputs.tag }}"
           go run ./cmd/mksign build \
             -app dist/socksit.exe \
             -engine dist/sing-box.exe \
@@ -149,6 +164,7 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag }}
           name: SocksIt ${{ steps.meta.outputs.version }}
           generate_release_notes: true # auto "What's Changed" from commits/PRs since the previous tag
           # Stated in the release itself: an unsigned build was the kind of thing
