@@ -74,7 +74,21 @@ Import-Certificate -FilePath socksit-codesign.cer -CertStoreLocation Cert:\Local
 Import-Certificate -FilePath socksit-codesign.cer -CertStoreLocation Cert:\LocalMachine\TrustedPublisher
 ```
 
-## 4. Публичный путь: Azure Trusted Signing
+## 4. Публичный путь: облачная подпись
+
+Оба варианта из §2 работают без железного токена — ключ живёт в облаке вендора.
+
+**Certum SimplySign** (реалистичный вариант, см. §2). Войдите в SimplySign Desktop —
+сертификат появится в хранилище Windows как смарт-карта, дальше подпись обычная:
+
+```powershell
+.uild\sign.ps1 -Files dist\socksit.exe,dist\sing-box.exe    # авто-выбор сертификата
+.uild\sign.ps1 -Thumbprint <thumbprint> -Files dist\SocksIt.msi
+```
+
+`build/release-local.ps1` делает это сам — отдельный вызов нужен только для разовой подписи.
+
+**Azure Artifact Signing** — если ваша организация проходит по географии (см. §2):
 
 1. Завести Trusted Signing account в Azure (нужна верифицированная организация).
 2. Скачать signing dlib и сделать `metadata.json` (`Endpoint`, `CodeSigningAccountName`,
