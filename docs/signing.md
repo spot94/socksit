@@ -47,31 +47,56 @@
    бесплатные перевыпуски внутри срока — заложите это в процесс, иначе подпись отвалится
    посреди года.
 
-## 3. Внутренний путь: self-signed + доверие через GPO
+## 3. Текущий путь: self-signed сертификат проекта
 
-Создать сертификат один раз на билд-машине:
-```powershell
-$c = New-SelfSignedCertificate -Type CodeSigningCert `
-  -Subject "CN=SocksIt Code Signing, O=SciEntetiq" `
-  -CertStoreLocation Cert:\CurrentUser\My `
-  -KeyUsage DigitalSignature -KeyExportPolicy Exportable `
-  -NotAfter (Get-Date).AddYears(5)
-$c.Thumbprint                                                  # им и подписываем
-Export-Certificate -Cert $c -FilePath socksit-codesign.cer     # публичная часть для GPO
-```
-Подписать:
-```powershell
-.\build\sign.ps1 -Thumbprint <thumbprint> -Files bin\socksit.exe,socksit-setup.exe
-```
-Раскатать доверие на клиентов — GPO: *Computer Configuration → Policies → Windows Settings →
-Security Settings → Public Key Policies*:
-- `socksit-codesign.cer` → **Trusted Root Certification Authorities** (доверенная цепочка),
-- и в **Trusted Publishers** (чтобы не переспрашивал).
+Релизы подписываются самоподписанным сертификатом проекта. Создать его заново (на новой
+сборочной машине или взамен истёкшего):
 
-Локально для проверки:
 ```powershell
-Import-Certificate -FilePath socksit-codesign.cer -CertStoreLocation Cert:\LocalMachine\Root
-Import-Certificate -FilePath socksit-codesign.cer -CertStoreLocation Cert:\LocalMachine\TrustedPublisher
+pwsh build/make-selfsigned-cert.ps1                     # или -Subject "CN=SocksIt, O=Ваша компания"
+pwsh build/make-selfsigned-cert.ps1 -TrustLocally       # + доверять ему на этой машине (нужен админ)
+```
+
+Скрипт кладёт приватную часть в хранилище пользователя, публичную — в
+`build/keys/socksit-codesign.cer` и печатает отпечаток. Ключ помечен экспортируемым намеренно:
+сборочная машина когда-нибудь умрёт, а перевыпуск означает новую раскатку доверия по всему
+парку. Сделайте резервную копию: `-BackupPassword (Read-Host -AsSecureString)`.
+
+**Текущий сертификат:**
+
+| | |
+|---|---|
+| Subject | `CN=SocksIt Code Signing, O=SocksIt` |
+| Отпечаток | `CE15DB655E2AA232A24BE9BC68778B7D876B5C1B` |
+| Действует до | 2031-09-02 |
+| Публичная часть | [`build/socksit-codesign.cer`](../build/socksit-codesign.cer) — лежит в репозитории |
+
+Проверить скачанный файл, не доверяя ему заранее:
+
+```powershell
+(Get-AuthenticodeSignature .\socksit.exe).SignerCertificate.Thumbprint
+# должно совпасть с отпечатком выше
+```
+
+### Что это даёт и чего не даёт
+
+**Внутри периметра**, где публичная часть раскатана через GPO (Computer Configuration →
+Policies → Windows Settings → Security Settings → Public Key Policies → в **оба** хранилища:
+Trusted Root Certification Authorities и Trusted Publishers), подпись полностью валидна.
+Windows показывает настоящего издателя, а политика антивируса может доверять **по издателю**,
+а не по пути установки — такое исключение переживает переустановку и смену каталога.
+
+**Снаружи — ничего.** Проверка цепочки завершится словами «обработка прервана на корневом
+сертификате, к которому отсутствует отношение доверия», SmartScreen репутацию на такой
+сертификат не копит, и предупреждение при скачивании останется. Единственное, что это меняет
+для публики, — файл перестаёт быть анонимным: отпечаток можно сверить с тем, что записан
+выше.
+
+Локально раскатать доверие для проверки:
+
+```powershell
+Import-Certificate -FilePath build\socksit-codesign.cer -CertStoreLocation Cert:\LocalMachine\Root
+Import-Certificate -FilePath build\socksit-codesign.cer -CertStoreLocation Cert:\LocalMachine\TrustedPublisher
 ```
 
 ## 4. Публичный путь: облачная подпись
@@ -120,7 +145,7 @@ signtool verify /pa /v socksit-setup.exe
 git tag v0.3.2
 
 $env:GITHUB_TOKEN = '<токен с правом repo>'
-pwsh build/release-local.ps1 -Version 0.3.2 -Proxy socks5h://172.16.0.2:1080
+pwsh build/release-local.ps1 -Version 0.3.2 -SelfSigned -Proxy socks5h://172.16.0.2:1080
 ```
 
 Скрипт делает всё в единственно правильном порядке:
@@ -133,6 +158,10 @@ pwsh build/release-local.ps1 -Version 0.3.2 -Proxy socks5h://172.16.0.2:1080
 **Порядок не косметика.** Манифест обновлений содержит SHA-256 файлов, на которые ссылается,
 а подпись меняет их байты. Подписать артефакт после публикации — значит молча сломать проверку
 обновления у всех клиентов: хеш не сойдётся, и обновление будет отвергнуто без внятной ошибки.
+
+`-SelfSigned` обязателен, пока сертификат самоподписанный: он пропускает проверку цепочки
+(она не может пройти) и добавляет в описание релиза честную строку о том, что подпись доверена
+только там, где раскатан корень. Без него «подписано» прочитается как «доверено».
 
 Полезные флаги: `-Unsigned` и `-NoPublish` для сухого прогона, `-Thumbprint` если в хранилище
 несколько сертификатов, `-SkipInstaller` только для проверки скрипта (релиз без MSI вернёт все

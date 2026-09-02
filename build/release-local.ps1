@@ -43,6 +43,11 @@ param(
   [Parameter(Mandatory)][string]$Version,
   [string]$Thumbprint,
   [switch]$Unsigned,
+  # The certificate is self-signed (build/make-selfsigned-cert.ps1). Skips the
+  # trust-chain check, which cannot pass unless this machine already trusts the
+  # root, and says so in the release notes: "signed" must not read as "trusted"
+  # to anyone outside the perimeter where that root is distributed.
+  [switch]$SelfSigned,
   [switch]$NoPublish,
   # Only for dry runs. A published release without the installer would send
   # everyone back to the exe-swap update path.
@@ -121,8 +126,10 @@ Step "Signing the binaries"
 if ($Unsigned) {
   Write-Warning "-Unsigned: publishing files nobody vouches for. SmartScreen and AV will flag them."
 } else {
+  if ($SelfSigned) { Note "self-signed: valid only where the root is distributed; public downloads keep warning" }
   $signArgs = @{ Files = @("$dist/socksit.exe", "$dist/sing-box.exe") }
   if ($Thumbprint) { $signArgs.Thumbprint = $Thumbprint }
+  if ($SelfSigned) { $signArgs.SkipVerify = $true }
   & "$PSScriptRoot/sign.ps1" @signArgs
   if ($LASTEXITCODE) { throw "signing failed" }
 }
@@ -140,6 +147,7 @@ if ($SkipInstaller) {
   if (-not $Unsigned) {
     $msiArgs = @{ Files = @("$dist/SocksIt.msi") }
     if ($Thumbprint) { $msiArgs.Thumbprint = $Thumbprint }
+    if ($SelfSigned) { $msiArgs.SkipVerify = $true }
     & "$PSScriptRoot/sign.ps1" @msiArgs
     if ($LASTEXITCODE) { throw "signing the installer failed" }
   }
@@ -187,7 +195,9 @@ $auth = @('-H', "Authorization: Bearer $env:GITHUB_TOKEN", '-H', 'Accept: applic
 $body = @{
   tag_name = $tag; name = "SocksIt $Version"; draft = $false; prerelease = $false
   generate_release_notes = $true
-  body = if ($Unsigned) { '> **Unsigned build** — see docs/signing.md.' } else { '' }
+  body = if ($Unsigned) { "> **Unsigned build** - no code-signing certificate was used, so SmartScreen and antivirus will warn. See docs/signing.md." }
+         elseif ($SelfSigned) { "> **Signed with the project self-signed certificate.** Valid only where its root has been distributed (corporate GPO); public downloads still show a SmartScreen warning. See docs/signing.md." }
+         else { "" }
 } | ConvertTo-Json -Compress
 $tmp = New-TemporaryFile
 Set-Content $tmp $body -Encoding utf8
