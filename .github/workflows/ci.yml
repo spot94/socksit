@@ -57,8 +57,6 @@ jobs:
           pwsh -File build/build-msi.ps1 -Version '0.0.0' -From dist
       # An administrative install unpacks the package without touching the system:
       # no service registered, nothing installed, but a broken .wxs still fails.
-      # An administrative install unpacks the package without touching the system:
-      # no service registered, nothing installed, but a broken .wxs still fails.
       # The layout inside the image depends on the directory table, so the files are
       # looked up by name rather than at an assumed path.
       - name: Verify the installer unpacks
@@ -68,13 +66,19 @@ jobs:
           $dir = Join-Path $env:RUNNER_TEMP 'msi-check'
           $log = Join-Path $env:RUNNER_TEMP 'admin-install.log'
           New-Item -ItemType Directory -Force $dir | Out-Null
-          $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @('/a', "\"$msi\"", '/qn', "TARGETDIR=\"$dir\"", '/l*v', "\"$log\"")
-          "msiexec exit code: $($p.ExitCode)"
-          if (Test-Path $log) { "--- msiexec log (tail) ---"; Get-Content $log -Tail 25 }
-          "--- unpacked tree ---"
-          Get-ChildItem $dir -Recurse -File | ForEach-Object { '  {0}  ({1:N0} bytes)' -f $_.FullName.Substring($dir.Length), $_.Length }
+          # Plain strings: Start-Process quotes each argument itself, so adding quotes
+          # here passes them through to msiexec and the package "cannot be opened".
+          $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @('/a', $msi, '/qn', "TARGETDIR=$dir", '/l*v', $log)
+          $report = @("msiexec exit code: $($p.ExitCode)")
+          if (Test-Path $log) { $report += '--- msiexec log (tail) ---'; $report += (Get-Content $log -Tail 25) }
+          $report += '--- unpacked tree ---'
+          $report += (Get-ChildItem $dir -Recurse -File | ForEach-Object { '  {0} ({1:N0} bytes)' -f $_.FullName.Substring($dir.Length), $_.Length })
+          # Also into the job summary: Actions logs need repository rights to read,
+          # while the summary travels with the check run and is readable by anyone
+          # who can see the repository.
+          $report | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append | Write-Host
           if ($p.ExitCode -ne 0) { throw "msiexec /a failed: $($p.ExitCode)" }
           foreach ($f in 'socksit.exe','sing-box.exe') {
             if (-not (Get-ChildItem $dir -Recurse -Filter $f -File)) { throw "the package is missing $f" }
           }
-          "installer OK"
+          "installer OK" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
