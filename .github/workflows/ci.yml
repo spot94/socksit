@@ -57,16 +57,24 @@ jobs:
           pwsh -File build/build-msi.ps1 -Version '0.0.0' -From dist
       # An administrative install unpacks the package without touching the system:
       # no service registered, nothing installed, but a broken .wxs still fails.
+      # An administrative install unpacks the package without touching the system:
+      # no service registered, nothing installed, but a broken .wxs still fails.
+      # The layout inside the image depends on the directory table, so the files are
+      # looked up by name rather than at an assumed path.
       - name: Verify the installer unpacks
         shell: pwsh
         run: |
+          $msi = (Resolve-Path build/SocksIt.msi).Path
           $dir = Join-Path $env:RUNNER_TEMP 'msi-check'
           $log = Join-Path $env:RUNNER_TEMP 'admin-install.log'
-          $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @(
-            '/a', (Resolve-Path build/SocksIt.msi), '/qn', "TARGETDIR=$dir", '/l*v', $log)
-          if ($p.ExitCode -ne 0) { Get-Content $log -Tail 40; throw "msiexec /a failed: $($p.ExitCode)" }
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @('/a', "\"$msi\"", '/qn', "TARGETDIR=\"$dir\"", '/l*v', "\"$log\"")
+          "msiexec exit code: $($p.ExitCode)"
+          if (Test-Path $log) { "--- msiexec log (tail) ---"; Get-Content $log -Tail 25 }
+          "--- unpacked tree ---"
+          Get-ChildItem $dir -Recurse -File | ForEach-Object { '  {0}  ({1:N0} bytes)' -f $_.FullName.Substring($dir.Length), $_.Length }
+          if ($p.ExitCode -ne 0) { throw "msiexec /a failed: $($p.ExitCode)" }
           foreach ($f in 'socksit.exe','sing-box.exe') {
-            $path = Join-Path $dir "SocksIt\$f"
-            if (-not (Test-Path $path)) { throw "the package is missing $f" }
-            '{0}: {1:N0} bytes' -f $f, (Get-Item $path).Length
+            if (-not (Get-ChildItem $dir -Recurse -Filter $f -File)) { throw "the package is missing $f" }
           }
+          "installer OK"
