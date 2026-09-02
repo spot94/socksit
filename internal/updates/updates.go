@@ -51,6 +51,13 @@ type Manifest struct {
 		SHA256 string `json:"sha256"`
 		Size   int64  `json:"size"`
 	} `json:"app"`
+	// MSI is the installer for the same release. Present since 0.3.2; absent in
+	// older manifests, and ignored by clients that were not installed from one.
+	MSI struct {
+		URL    string `json:"url"`
+		SHA256 string `json:"sha256"`
+		Size   int64  `json:"size"`
+	} `json:"msi"`
 	Engine struct {
 		Version string `json:"version"`
 		URL     string `json:"url"`

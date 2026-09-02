@@ -15,7 +15,10 @@ import (
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
 
+	"golang.org/x/sys/windows/registry"
+	"net/http"
 	"socksit/internal/updates"
+	"strings"
 )
 
 // detachedFlags start the restart helper as an independent process that survives
@@ -57,6 +60,9 @@ func (r *Runtime) applyUpdate() (applyResult, error) {
 	}
 	if !updates.Newer(m.Version, r.Version) {
 		return applyResult{OK: true, Message: "already up to date (" + r.Version + ")"}, nil
+	}
+	if chooseUpdateMethod(m.MSI.URL != "" && m.MSI.SHA256 != "", installedFromMSI()) == updateViaMSI {
+		return r.applyUpdateMSI(ctx, client, m)
 	}
 	if m.App.URL == "" || m.App.SHA256 == "" {
 		return applyResult{}, errors.New("the manifest has no app artifact to download")
@@ -162,4 +168,72 @@ func RunUpdateRestart(serviceName, target, oldPath string) error {
 		return fmt.Errorf("rollback: start service: %w", err)
 	}
 	return errors.New("update failed to start; rolled back to the previous version")
+}
+
+// updateMethod is how an update gets applied. Two paths exist because the
+// installer can only upgrade what it installed.
+type updateMethod string
+
+const (
+	updateViaMSI updateMethod = "msi" // Windows Installer: stops the service, swaps files, rolls back on failure
+	updateViaExe updateMethod = "exe" // in-place swap of the running exe, with our own restart helper
+)
+
+// chooseUpdateMethod prefers the installer when both sides support it.
+//
+// The exe swap — download a binary, rename the running one aside, write the new
+// one, restart the service — is indistinguishable from what a dropper does, and
+// behavioural AV (Kaspersky's PDM) flags it. An msiexec upgrade is the shape
+// Windows expects: a trusted Microsoft binary drives it, the service stop/start
+// is declared rather than improvised, and a failed install rolls back on its own.
+//
+// It only works where there is a product to upgrade. An install registered by
+// `socksit install` has no MSI inventory entry, so ServiceInstall would hit the
+// existing service, fail, and roll the whole thing back — those keep the swap.
+func chooseUpdateMethod(manifestHasMSI, installedFromMSI bool) updateMethod {
+	if manifestHasMSI && installedFromMSI {
+		return updateViaMSI
+	}
+	return updateViaExe
+}
+
+// installedFromMSI reads the marker the installer writes (see build/installer.wxs).
+func installedFromMSI() bool {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\SocksIt`, registry.QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	defer k.Close()
+	v, _, err := k.GetStringValue("InstalledBy")
+	return err == nil && strings.EqualFold(strings.TrimSpace(v), "msi")
+}
+
+// applyUpdateMSI downloads the installer and hands it to msiexec, detached: the
+// install stops this very service, so nothing after the spawn is guaranteed to
+// run. Everything that must be recorded is recorded before it.
+func (r *Runtime) applyUpdateMSI(ctx context.Context, client *http.Client, m updates.Manifest) (applyResult, error) {
+	dir := filepath.Join(r.DataDir, "update")
+	_ = os.RemoveAll(dir) // a previous attempt's package is dead weight (~50 MB)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return applyResult{}, fmt.Errorf("prepare the update directory: %w", err)
+	}
+	r.logf("INFO", "update: downloading installer %s from %s", m.Version, m.MSI.URL)
+	body, err := updates.DownloadVerified(ctx, client, m.MSI.URL, m.MSI.SHA256)
+	if err != nil {
+		return applyResult{}, err
+	}
+	pkg := filepath.Join(dir, "SocksIt-"+m.Version+".msi")
+	if err := os.WriteFile(pkg, body, 0o600); err != nil {
+		return applyResult{}, fmt.Errorf("write the installer: %w", err)
+	}
+	logPath := filepath.Join(dir, "msiexec.log")
+	r.logf("INFO", "update: installing %s via msiexec (log: %s)", m.Version, logPath)
+
+	cmd := exec.Command("msiexec.exe", "/i", pkg, "/qn", "/norestart", "/l*v", logPath)
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: detachedFlags}
+	if err := cmd.Start(); err != nil {
+		return applyResult{}, fmt.Errorf("start msiexec: %w", err)
+	}
+	return applyResult{OK: true, Applied: true,
+		Message: "Installer " + m.Version + " downloaded — Windows Installer is applying it and will restart the service."}, nil
 }

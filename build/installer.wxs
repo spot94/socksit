@@ -8,7 +8,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="SocksIt"
            Manufacturer="SocksIt"
-           Version="0.1.0.0"
+           Version="$(var.Version)"
            UpgradeCode="7C4B2E9A-3F1D-4E88-9A2C-1B6D5E0F7A31"
            Scope="perMachine">
 
@@ -37,6 +37,15 @@
                           Wait="yes" />
         </Component>
 
+        <!-- Marks the install as installer-managed. The updater reads it to decide
+             between an msiexec upgrade (clean: Windows Installer stops the service,
+             swaps the files and rolls back on failure) and the in-place exe swap it
+             has to use for installs registered by `socksit install`. -->
+        <Component Id="InstallMarker" Bitness="always64" Guid="B18C6E44-58F1-4C0E-9D3C-7A2E5F9B41D7">
+          <RegistryValue Root="HKLM" Key="SOFTWARE\SocksIt" Name="InstalledBy"
+                         Type="string" Value="msi" KeyPath="yes" />
+        </Component>
+
         <!-- Bundled engine (untouched official binary). -->
         <Component Id="Engine" Bitness="always64">
           <File Id="singbox_exe" Source="$(var.StageDir)\sing-box.exe" KeyPath="yes" />
@@ -47,6 +56,7 @@
     <Feature Id="Main" Title="SocksIt">
       <ComponentRef Id="MainExe" />
       <ComponentRef Id="Engine" />
+      <ComponentRef Id="InstallMarker" />
     </Feature>
   </Package>
 </Wix>

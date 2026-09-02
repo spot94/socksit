@@ -85,6 +85,7 @@ func build(args []string) {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
 	app := fs.String("app", "", "path to socksit.exe (required)")
 	engine := fs.String("engine", "", "path to sing-box.exe")
+	msi := fs.String("msi", "", "path to the SocksIt installer (published as SocksIt.msi)")
 	version := fs.String("version", "", "app version, e.g. 0.2.0 (required)")
 	channel := fs.String("channel", "stable", "release channel")
 	baseURL := fs.String("base-url", "", "release asset download base URL (required)")
@@ -124,6 +125,16 @@ func build(args []string) {
 			"sha256": sha256file(*app),
 			"size":   size(*app),
 		},
+	}
+	// The installer is advertised only when built. A client updates through it
+	// only if its own install came from an MSI (see chooseUpdateMethod); everyone
+	// else keeps using the exe, so an older client simply ignores this field.
+	if *msi != "" {
+		m["msi"] = map[string]any{
+			"url":    base + "/SocksIt.msi",
+			"sha256": sha256file(*msi),
+			"size":   size(*msi),
+		}
 	}
 	if *engine != "" {
 		m["engine"] = map[string]any{
