@@ -1,7 +1,13 @@
 # Prod override: no host port — the server is reachable only through a
-# TLS-terminating reverse proxy on the shared "edge" network, which forwards
-# X-Forwarded-Proto so Secure cookies are honoured. Config the proxy to route
-# your public host to configserver:8080. Use with:  --env-file .env.prod
+# TLS-terminating reverse proxy on the shared "edge" network. Point the proxy at
+# configserver:8080. Use with:  --env-file .env.prod
+#
+# The network is external on purpose (the proxy owns it, and compose creating its
+# own "edge" would silently isolate this container from it), so create it once:
+#   docker network create edge
+#
+# SECURE_COOKIES=true belongs with it: a Secure cookie is only stored by the
+# browser over HTTPS, so without the proxy in front, login silently does nothing.
 services:
   configserver:
     environment:

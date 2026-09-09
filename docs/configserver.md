@@ -46,11 +46,44 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.d
 # → http://127.0.0.1:8080  (pull_policy: always держит :latest свежим)
 ```
 
-Прод (за TLS-терминирующим обратным прокси во внешней сети `edge`):
+**Прод.** Прод-оверрей **не публикует порт наружу**: сервер виден только внутри общей
+docker-сети `edge`, куда к нему приходит TLS-терминирующий обратный прокси. Сеть объявлена
+`external`, то есть compose её не создаёт — иначе он молча поднял бы отдельную сеть, в
+которой прокси нет. Создайте её один раз:
 
 ```bash
+docker network create edge     # один раз на хосте
 docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d
 ```
+
+Затем подключите к сети `edge` свой прокси и направьте публичный хост на
+`configserver:8080`. Пока прокси нет, контейнер поднимется, но снаружи будет недоступен —
+это ожидаемое состояние, а не ошибка. Минимальный вариант, если прокси ещё нет (Caddy сам
+получит сертификат Let's Encrypt):
+
+```yaml
+# docker-compose.caddy.yml — поднимается отдельно: docker compose -f docker-compose.caddy.yml up -d
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    command: caddy reverse-proxy --from configs.example.com --to configserver:8080
+    networks: [edge]
+    volumes: [caddydata:/data]
+networks:
+  edge:
+    external: true
+volumes:
+  caddydata:
+```
+
+> **`SECURE_COOKIES=true` работает только по HTTPS.** Браузер не сохраняет Secure-cookie,
+> полученную по обычному HTTP, поэтому вход будет молча «не срабатывать» — страница просто
+> вернётся к форме без ошибки. Если нужно временно открыть сервер по HTTP, снимайте флаг
+> вместе с публикацией порта, помня о цене: пароль администратора пойдёт по сети открытым,
+> а защита от перебора считает клиентов по `X-Forwarded-For`, который без прокси подделывает
+> сам клиент.
 
 Зафиксировать версию — `CONFIGSERVER_IMAGE=ghcr.io/spot94/socksit-configserver:0.1.5`
 в env-файле.
