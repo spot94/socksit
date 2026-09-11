@@ -36,3 +36,7 @@ Thumbs.db
 !/deploy/configserver/.env.example
 /deploy/configserver/data/
 /data/
+
+# WiX build byproducts (a stray one blocks the release preflight)
+/build/SocksIt.msi
+*.wixpdb
