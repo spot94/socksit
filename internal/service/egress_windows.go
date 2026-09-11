@@ -53,6 +53,10 @@ const (
 	// Backstop poll, for a change notification that never arrived. Kept long:
 	// each probe is a real TCP connection to the proxy.
 	egressCheckInterval = 5 * time.Minute
+	// Until the first verdict exists there is nothing for the panel or `doctor`
+	// to report, and a freshly started engine is exactly when someone is looking.
+	// Poll faster until one does.
+	egressFirstInterval = 15 * time.Second
 	// Per-dial budget. A wrong adapter usually fails at once with "unreachable
 	// network"; the timeout is for the case where it black-holes instead.
 	egressProbeTimeout = 3 * time.Second
@@ -211,18 +215,22 @@ func (r *Runtime) superviseProxyEgress(ctx context.Context) {
 		defer mon.Stop()
 	}
 
-	tick := time.NewTicker(egressCheckInterval)
-	defer tick.Stop()
-
 	// The pin a restart was already spent on. If it comes back unchanged and
 	// still broken, restarting again cannot help — say it once and stop.
 	var actedOn string
 	for {
+		wait := egressCheckInterval
+		if h, _ := r.egressHealth.Load().(egressHealth); h == egressUnknown {
+			wait = egressFirstInterval
+		}
+		t := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
+			t.Stop()
 			return
 		case <-changed:
-		case <-tick.C:
+			t.Stop()
+		case <-t.C:
 		}
 		if k := r.checkProxyEgress(actedOn); k != "" {
 			actedOn = k
