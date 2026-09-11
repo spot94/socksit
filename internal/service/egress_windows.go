@@ -232,29 +232,35 @@ func (r *Runtime) superviseProxyEgress(ctx context.Context) {
 			t.Stop()
 		case <-t.C:
 		}
-		if k := r.checkProxyEgress(actedOn); k != "" {
+		if k := r.checkProxyEgress(actedOn, r.engineSettled(), probeEgress); k != "" {
 			actedOn = k
 		}
 	}
 }
 
+// probeFunc is the shape of probeEgress, taken as a parameter so the decision
+// path can be tested without a network: staging a genuinely stale pin needs a
+// second route to the proxy, which a normal machine does not have.
+type probeFunc func(egressPin) (egressHealth, string)
+
+// engineSettled reports whether the engine is up and past its startup. While it
+// starts or restarts the routing table is half-built, and a failed dial then says
+// nothing about the pin.
+func (r *Runtime) engineSettled() bool {
+	sup := r.sup.Load()
+	return sup != nil && sup.State() == engine.StateRunning
+}
+
 // checkProxyEgress runs one probe, publishes the verdict for diagnostics and
 // restarts the engine when the pin is the thing that is broken. It returns the
 // pin key it acted on, or "" if it did not act.
-func (r *Runtime) checkProxyEgress(actedOn string) string {
-	if !r.enabled.Load() {
-		r.egressHealth.Store(egressUnknown)
-		return ""
-	}
-	// Only judge a settled engine: while it starts or restarts the routing table
-	// is half-built, and a failed dial says nothing about the pin.
-	sup := r.sup.Load()
-	if sup == nil || sup.State() != engine.StateRunning {
+func (r *Runtime) checkProxyEgress(actedOn string, settled bool, probe probeFunc) string {
+	if !r.enabled.Load() || !settled {
 		r.egressHealth.Store(egressUnknown)
 		return ""
 	}
 	p, _ := r.egress.Load().(egressPin)
-	h, via := probeEgress(p)
+	h, via := probe(p)
 	r.egressHealth.Store(h)
 	r.egressVia.Store(via)
 	if h != egressStale {

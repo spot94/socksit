@@ -135,3 +135,85 @@ func TestFirstIPv4RejectsAMissingAdapter(t *testing.T) {
 		t.Fatal("expected an error for an adapter that does not exist")
 	}
 }
+
+// The wiring between a stale verdict and the restart is the one link a live test
+// could not reach: staging a genuinely stale pin needs a second route to the
+// proxy, and a machine with one uplink has none. So it is covered here, with the
+// probe injected.
+func TestCheckProxyEgressActsOnlyOnAStalePin(t *testing.T) {
+	pin := egressPin{iface: "Ethernet", host: "10.77.10.69", port: 1080}
+
+	newRuntime := func() *Runtime {
+		r := &Runtime{restartCh: make(chan struct{}, 1)}
+		r.enabled.Store(true)
+		r.egress.Store(pin)
+		return r
+	}
+	restarted := func(r *Runtime) bool {
+		select {
+		case <-r.restartCh:
+			return true
+		default:
+			return false
+		}
+	}
+	probing := func(h egressHealth, via string) probeFunc {
+		return func(egressPin) (egressHealth, string) { return h, via }
+	}
+
+	t.Run("stale: restarts and reports the pin it acted on", func(t *testing.T) {
+		r := newRuntime()
+		got := r.checkProxyEgress("", true, probing(egressStale, "Wi-Fi"))
+		if got != pin.key() {
+			t.Errorf("acted on %q, want %q", got, pin.key())
+		}
+		if !restarted(r) {
+			t.Error("no restart signalled for a stale pin")
+		}
+		if h, _ := r.egressHealth.Load().(egressHealth); h != egressStale {
+			t.Errorf("published %q, want %q", h, egressStale)
+		}
+		if via, _ := r.egressVia.Load().(string); via != "Wi-Fi" {
+			t.Errorf("published via %q, want Wi-Fi", via)
+		}
+	})
+
+	// A restart that did not take must not be repeated: the pin came back the
+	// same, so the next one would not help either.
+	t.Run("stale twice on the same pin: only one restart", func(t *testing.T) {
+		r := newRuntime()
+		if got := r.checkProxyEgress(pin.key(), true, probing(egressStale, "Wi-Fi")); got != "" {
+			t.Errorf("acted again on %q", got)
+		}
+		if restarted(r) {
+			t.Error("restarted twice for the same pin")
+		}
+		// The verdict is still published: diagnostics must keep saying it is broken.
+		if h, _ := r.egressHealth.Load().(egressHealth); h != egressStale {
+			t.Errorf("published %q, want %q", h, egressStale)
+		}
+	})
+
+	for _, c := range []struct {
+		name    string
+		health  egressHealth
+		settled bool
+		enabled bool
+	}{
+		{"healthy pin", egressOK, true, true},
+		{"proxy down: not the pin's fault", egressProxyDown, true, true},
+		{"engine still starting", egressStale, false, true},
+		{"proxying paused", egressStale, true, false},
+	} {
+		t.Run("no restart: "+c.name, func(t *testing.T) {
+			r := newRuntime()
+			r.enabled.Store(c.enabled)
+			if got := r.checkProxyEgress("", c.settled, probing(c.health, "Wi-Fi")); got != "" {
+				t.Errorf("acted on %q", got)
+			}
+			if restarted(r) {
+				t.Error("restarted when it should not have")
+			}
+		})
+	}
+}
