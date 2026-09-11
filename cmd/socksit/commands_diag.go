@@ -82,6 +82,18 @@ func cmdDoctor(path string, args []string) error {
 		if v, ok := t["vpn_gateways_direct"].(string); ok && v != "" {
 			fmt.Printf("  vpn gateways   kept off fake-ip so their client can reach them: %s\n", v)
 		}
+		// Every other check here dials without the binding that proxied traffic
+		// uses, so a broken binding reads as a fully healthy install. Name it.
+		pinned, _ := t["proxy_iface"].(string)
+		via, _ := t["proxy_egress_via"].(string)
+		switch health, _ := t["proxy_egress"].(string); health {
+		case "stale":
+			fmt.Printf("  proxy egress   %s  unreachable from %q, which the proxy dial is bound to, but answers from %q — proxied apps get no reply until the engine re-pins (restart the service to do it now)\n", mark(false), pinned, via)
+		case "proxy-down":
+			fmt.Printf("  proxy egress   %s  the proxy answers on no path at all — not the binding to %q\n", mark(false), pinned)
+		case "ok":
+			fmt.Printf("  proxy egress   %s  reachable from %q, which the proxy dial is bound to\n", mark(true), pinned)
+		}
 	}
 	return nil
 }

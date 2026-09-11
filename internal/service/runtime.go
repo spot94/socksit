@@ -55,13 +55,16 @@ type Runtime struct {
 	Actor      string // audit actor (local username)
 	Version    string // app version, reported to the update check
 
-	enabled    atomic.Bool
-	sup        atomic.Pointer[engine.Supervisor]
-	restartCh  chan struct{}
-	log        io.Writer
-	lastUpdate atomic.Pointer[updates.Result]
-	lastConfig atomic.Pointer[configFetchResult]
-	vpnHosts   atomic.Value // string: VPN gateway names last exempted, so the log fires only on change
+	enabled      atomic.Bool
+	sup          atomic.Pointer[engine.Supervisor]
+	restartCh    chan struct{}
+	log          io.Writer
+	lastUpdate   atomic.Pointer[updates.Result]
+	lastConfig   atomic.Pointer[configFetchResult]
+	vpnHosts     atomic.Value // string: VPN gateway names last exempted, so the log fires only on change
+	egress       atomic.Value // egressPin: adapter the running config binds the SOCKS dial to
+	egressHealth atomic.Value // egressHealth: last verdict on whether that binding still works
+	egressVia    atomic.Value // string: adapter that does reach the proxy, when the pinned one cannot
 }
 
 func (r *Runtime) configPath() string { return filepath.Join(r.DataDir, "socksit.yaml") }
@@ -109,10 +112,12 @@ func (r *Runtime) Run(ctx context.Context) error {
 	if err := config.Watch(ctx, r.configPath(), 500*time.Millisecond, r.signalRestart); err != nil {
 		r.logf("WARN", "config watch unavailable: %v", err)
 	}
-	// NOTE: network-change self-heal is handled inside sing-box via
-	// auto_detect_interface. We deliberately do NOT restart the engine on route
-	// changes here — doing so reacts to sing-box's own auto_route edits and causes
-	// restart churn (proxy works for a few seconds, then drops). See U6 revision.
+	// Network-change self-heal inside sing-box (auto_detect_interface) covers every
+	// outbound EXCEPT the proxy one, which resolveProxyEgress pins to a named
+	// adapter — so that one needs watching. Still no blanket "restart on route
+	// change": that reacted to sing-box's own auto_route edits and churned (U6).
+	// See egress_windows.go for the comparison that keeps it quiet.
+	go r.superviseProxyEgress(ctx)
 
 	// IPC control server. Its DACL must grant whoever is logged in, so it is
 	// rebound when the interactive user appears or changes (see superviseControlPipe).
@@ -219,7 +224,11 @@ func (r *Runtime) superviseLoop(ctx context.Context) error {
 			}
 			continue
 		}
+		// Capture the override BEFORE resolving: afterwards proxy.interface holds
+		// either the operator's value or ours, and the two must not be confused.
+		userPinnedIface := strings.TrimSpace(cfg.Proxy.Interface) != ""
 		r.resolveProxyEgress(cfg) // pin the SOCKS dial to the adapter that reaches the proxy (VPN-safe)
+		r.egress.Store(newEgressPin(cfg, userPinnedIface))
 		// Persist engine state (notably the fake-ip table) next to the config, so a
 		// restart does not strand apps holding an address minted by the previous run.
 		cfg.CachePath = filepath.Join(r.DataDir, "cache.db")
@@ -521,6 +530,20 @@ func (r *Runtime) Status() (any, error) {
 		// visible in diagnostics instead of being invisible magic.
 		if v, _ := r.vpnHosts.Load().(string); v != "" {
 			m["vpn_gateways_direct"] = v
+		}
+		// The adapter the SOCKS dial is bound to, plus the last verdict on whether it
+		// still reaches the proxy. When it does not, every proxied app is dead while
+		// every check that dials without the binding still passes — so this has to be
+		// reported, not just acted on. The verdict is cached by superviseProxyEgress;
+		// status polling must not dial anything.
+		if p, _ := r.egress.Load().(egressPin); p.iface != "" {
+			m["proxy_iface"] = p.iface
+			if h, _ := r.egressHealth.Load().(egressHealth); h != egressUnknown {
+				m["proxy_egress"] = string(h)
+				if via, _ := r.egressVia.Load().(string); via != "" && h == egressStale {
+					m["proxy_egress_via"] = via
+				}
+			}
 		}
 		// Surface an available update so the tray can notify. Only in notify mode:
 		// auto installs it itself, so there is nothing for the user to act on.

@@ -147,6 +147,9 @@ type ipcStatus struct {
 	Version         string `json:"version"`          // the running service's build version
 	UpdateAvailable string `json:"update_available"` // newer version (notify mode); empty otherwise
 	HasCreds        bool   `json:"has_creds"`        // SOCKS credentials are stored
+	ProxyIface      string `json:"proxy_iface"`      // adapter the SOCKS dial is pinned to
+	ProxyEgress     string `json:"proxy_egress"`     // "ok" | "stale" | "proxy-down"
+	ProxyEgressVia  string `json:"proxy_egress_via"` // adapter that does reach the proxy, when stale
 }
 
 func (a *app) bind() {
@@ -656,8 +659,8 @@ func (a *app) formatProxy(o proxytest.Outcome, err error) result {
 	var egress string
 	switch o.Egress {
 	case "ok":
-		egress = a.tr("Egress test (CONNECT 1.1.1.1:443): success ✓ — the proxy forwards traffic",
-			"Тест выхода (CONNECT 1.1.1.1:443): успех ✓ — прокси пропускает трафик")
+		egress = a.tr("Egress test (CONNECT 1.1.1.1:443): success ✓ — the proxy accepts and forwards this dial (made from the service, not through the tunnel)",
+			"Тест выхода (CONNECT 1.1.1.1:443): успех ✓ — прокси принял и пропустил этот вызов (сделан из службы, не через туннель)")
 	case "refused":
 		egress = a.tr(
 			fmt.Sprintf("Egress test: refused (code %d: %s) — the proxy speaks SOCKS5 but blocked the test destination; it may still work for your apps", o.RepCode, replyTextEN(o.RepCode)),
@@ -906,6 +909,16 @@ func (a *app) buildDiagnostics() string {
 		line("[x] " + a.tr("No proxy address set — open Settings and set the SOCKS5 address.", "Адрес прокси не задан — откройте «Настройки» и укажите адрес SOCKS5."))
 	} else {
 		line("[ok] "+a.tr("Proxy configured: %s:%d (mode: %s, kill-switch: %s).", "Прокси настроен: %s:%d (режим: %s, kill-switch: %s)."), addr, c.Proxy.Port, c.Mode, onOff(c.KillSwitchOn()))
+	}
+
+	// A stale pin kills every proxied app while leaving direct traffic and every
+	// check above green, because they all dial without it. Say so plainly here:
+	// this screen is where someone looks when "nothing goes through the proxy".
+	if haveStatus && st.ProxyEgress == "stale" {
+		line("[x] "+a.tr("The proxy is unreachable from adapter %q, which the proxy dial is bound to — but answers from %q.",
+			"Прокси недоступен с адаптера «%s», к которому привязан вызов, — но отвечает с «%s»."), st.ProxyIface, st.ProxyEgressVia)
+		line("     " + a.tr("The adapter changed under the running engine, so proxied apps get no reply. It re-pins itself; restart the service to do it now.",
+			"Адаптер сменился под работающим движком, поэтому проксируемые приложения не получают ответа. Привязка обновится сама; чтобы сразу — перезапустите службу."))
 	}
 
 	gen := filepath.Join(a.dataDir, "config.json")
