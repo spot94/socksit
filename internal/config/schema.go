@@ -689,7 +689,14 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf("mode: must be %q or %q, got %q", ModeAllowlist, ModeBlocklist, c.Mode)
 	}
-	if strings.TrimSpace(c.Proxy.Address) == "" {
+	// A managed config is allowed to arrive without a proxy: the whole point of
+	// config_source is that the feed supplies the routing, so a bootstrap preset
+	// should be able to carry nothing but the URL to fetch it from. Requiring the
+	// address here forced every installer to duplicate settings it does not own,
+	// and a duplicate is a second source of truth that drifts. The datapath still
+	// refuses to start without one (see superviseLoop) — it just waits instead of
+	// failing the install.
+	if strings.TrimSpace(c.Proxy.Address) == "" && !c.ConfigManaged() {
 		return fmt.Errorf("proxy.address: required")
 	}
 	if c.Proxy.Port < 1 || c.Proxy.Port > 65535 {

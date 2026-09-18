@@ -224,6 +224,18 @@ func (r *Runtime) superviseLoop(ctx context.Context) error {
 			}
 			continue
 		}
+		// A managed config may legitimately have no proxy yet: a bootstrap preset
+		// carries only the feed URL and the real settings arrive seconds later.
+		// Generating an engine config with an empty SOCKS server would crash-loop
+		// sing-box, so hold here the same way an invalid config is held — the fetch
+		// runs on its own goroutine and signals a restart once it lands.
+		if strings.TrimSpace(cfg.Proxy.Address) == "" {
+			r.logf("INFO", "no proxy address yet — waiting for the managed config from %s (the tunnel stays down until it arrives)", cfg.ConfigSource.URL)
+			if !r.waitRestart(ctx) {
+				return ctx.Err()
+			}
+			continue
+		}
 		// Capture the override BEFORE resolving: afterwards proxy.interface holds
 		// either the operator's value or ours, and the two must not be confused.
 		userPinnedIface := strings.TrimSpace(cfg.Proxy.Interface) != ""
