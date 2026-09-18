@@ -52,6 +52,7 @@ func (r *Runtime) ConfigFetch() (any, error) {
 func (r *Runtime) superviseConfigSource(ctx context.Context) {
 	timer := time.NewTimer(10 * time.Second) // fetch soon after start
 	defer timer.Stop()
+	fails := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -62,12 +63,48 @@ func (r *Runtime) superviseConfigSource(ctx context.Context) {
 		cfg := r.lenientConfig()
 		if cfg.ConfigManaged() {
 			if _, err := r.fetchConfig(ctx); err != nil {
-				r.logf("WARN", "config fetch failed: %v", err)
+				fails++
+				next = nextFetchDelay(cfg.ConfigEvery(), fails)
+				r.logf("WARN", "config fetch failed (attempt %d): %v — retrying in %s", fails, err, next)
+			} else {
+				if fails > 0 {
+					r.logf("INFO", "config fetch recovered after %d failed attempt(s)", fails)
+				}
+				fails = 0
+				next = cfg.ConfigEvery()
 			}
-			next = cfg.ConfigEvery()
+		} else {
+			fails = 0
 		}
 		timer.Reset(next)
 	}
+}
+
+// configRetryBase is the first retry delay after a failed fetch.
+const configRetryBase = time.Minute
+
+// nextFetchDelay says how long to wait before trying again. fails counts
+// consecutive failures; 0 means the last attempt succeeded.
+//
+// A failed fetch used to wait out the whole interval, so a machine installed
+// with a bad feed URL — or while the config server was down — sat unconfigured
+// for an hour with nothing proxied, which looks from outside like a product
+// that does not work. Retry within a minute instead, then back off to the
+// configured interval so a server that is down for a day is not hammered.
+// ConfigEvery floors at a minute, so the first retry is never longer than the
+// interval itself.
+func nextFetchDelay(interval time.Duration, fails int) time.Duration {
+	if fails <= 0 {
+		return interval
+	}
+	d := configRetryBase
+	for i := 1; i < fails && d < interval; i++ {
+		d *= 2
+	}
+	if d > interval {
+		d = interval
+	}
+	return d
 }
 
 // fetchConfig pulls the remote config, verifies it (signature when required),
